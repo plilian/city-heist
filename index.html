@@ -374,6 +374,23 @@ function addBuilding(x, z, w, d, h) {
 buildCity();
 
 // ============================================================
+//  CITY BOUNDARY WALLS (invisible barriers)
+// ============================================================
+const cityBoundary = halfCity + CITY.road / 2 + 1; // just past the outer roads
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333, transparent: true, opacity: 0.15 });
+const wallH = 4;
+// North wall
+const wallN = new THREE.Mesh(new THREE.BoxGeometry(cityBoundary * 2 + 4, wallH, 1), wallMat);
+wallN.position.set(0, wallH / 2, cityBoundary); scene.add(wallN);
+// South wall
+const wallS = wallN.clone(); wallS.position.z = -cityBoundary; scene.add(wallS);
+// East wall
+const wallE = new THREE.Mesh(new THREE.BoxGeometry(1, wallH, cityBoundary * 2 + 4), wallMat);
+wallE.position.set(cityBoundary, wallH / 2, 0); scene.add(wallE);
+// West wall
+const wallW = wallE.clone(); wallW.position.x = -cityBoundary; scene.add(wallW);
+
+// ============================================================
 //  PLAYER CHARACTER
 // ============================================================
 const player = new THREE.Group();
@@ -612,7 +629,7 @@ function makeTrafficCar() {
   trafficCars.push(car);
   return car;
 }
-for (let i = 0; i < 10; i++) makeTrafficCar();
+for (let i = 0; i < 25; i++) makeTrafficCar();
 
 // ============================================================
 //  GARAGE (delivery point) + TARGET CAR
@@ -721,10 +738,9 @@ function resolveBuildingCollision(pos, radius) {
       }
     }
   }
-  // keep inside city bounds
-  const lim = halfCity + 4;
-  pos.x = Math.max(-lim, Math.min(lim, pos.x));
-  pos.z = Math.max(-lim, Math.min(lim, pos.z));
+  // keep inside city boundary walls (hard clamp)
+  pos.x = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, pos.x));
+  pos.z = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, pos.z));
 }
 
 function carCollidesAt(c, x, z) {
@@ -893,29 +909,34 @@ function updatePedestrians(dt) {
     const nx = p.mesh.position.x + Math.sin(p.dir) * p.speed * dt;
     const nz = p.mesh.position.z + Math.cos(p.dir) * p.speed * dt;
 
-    // keep them on/near roads (sidewalks). If they wander too far onto a block, turn.
-    const test = isOnRoad(nx, nz) || isOnSidewalk(nx, nz);
-    if (test) {
+    // keep on sidewalk ONLY (not roads, not buildings)
+    const onSidewalk = isOnSidewalk(nx, nz);
+    // also check not inside any building
+    let inBuilding = false;
+    for (const b of collidables) {
+      if (nx > b.x - b.w/2 && nx < b.x + b.w/2 &&
+          nz > b.z - b.d/2 && nz < b.z + b.d/2) {
+        inBuilding = true; break;
+      }
+    }
+    if (onSidewalk && !inBuilding) {
       p.mesh.position.x = nx;
       p.mesh.position.z = nz;
     } else {
-      p.dir += Math.PI * (0.5 + Math.random() * 0.5); // turn around
+      // turn back toward sidewalk — face nearest road center and walk parallel
+      p.dir += Math.PI * (0.5 + Math.random() * 0.5);
     }
 
-    // bounds: wrap around if they leave the city
-    const lim = halfCity + 2;
-    if (p.mesh.position.x > lim || p.mesh.position.x < -lim ||
-        p.mesh.position.z > lim || p.mesh.position.z < -lim) {
-      p.dir += Math.PI;
-    }
+    // hard boundary: cannot leave city
+    p.mesh.position.x = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, p.mesh.position.x));
+    p.mesh.position.z = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, p.mesh.position.z));
 
-    // random direction changes / pauses
+    // random direction changes
     p.turnTimer -= dt;
     if (p.turnTimer <= 0) {
       p.turnTimer = 2 + Math.random() * 5;
-      // small random turn or stop briefly
       if (Math.random() < 0.3) {
-        p.dir += (Math.random() - 0.5) * Math.PI;
+        p.dir += (Math.random() - 0.5) * Math.PI * 0.5;
       }
     }
 
@@ -931,11 +952,28 @@ function updatePedestrians(dt) {
   }
 }
 
-// a sidewalk is a thin ring just outside each road centerline
+// sidewalk = the narrow strip just outside the road edge (between road and building block)
 function isOnSidewalk(x, z) {
   for (const rc of roadCenters) {
-    if (Math.abs(x - rc) < roadHalf + 2.0 && Math.abs(x - rc) > roadHalf - 0.5) return true;
-    if (Math.abs(z - rc) < roadHalf + 2.0 && Math.abs(z - rc) > roadHalf - 0.5) return true;
+    // check if on the sidewalk band of a vertical road (x-near a road center)
+    const dx = Math.abs(x - rc);
+    if (dx > roadHalf + 0.5 && dx < roadHalf + 2.5) {
+      // must NOT be inside a building block
+      for (const b of collidables) {
+        if (x > b.x - b.w/2 - 0.5 && x < b.x + b.w/2 + 0.5 &&
+            z > b.z - b.d/2 - 0.5 && z < b.z + b.d/2 + 0.5) return false;
+      }
+      return true;
+    }
+    // check horizontal road (z-near a road center)
+    const dz = Math.abs(z - rc);
+    if (dz > roadHalf + 0.5 && dz < roadHalf + 2.5) {
+      for (const b of collidables) {
+        if (x > b.x - b.w/2 - 0.5 && x < b.x + b.w/2 + 0.5 &&
+            z > b.z - b.d/2 - 0.5 && z < b.z + b.d/2 + 0.5) return false;
+      }
+      return true;
+    }
   }
   return false;
 }
@@ -1022,15 +1060,22 @@ function updateTraffic(dt) {
     const L = 3.0;
     const v = car.speed;
     car.heading += (v / L) * Math.tan(car.steer) * dt;
-    car.mesh.position.x += Math.sin(car.heading) * v * dt;
-    car.mesh.position.z += Math.cos(car.heading) * v * dt;
+    const nx = car.mesh.position.x + Math.sin(car.heading) * v * dt;
+    const nz = car.mesh.position.z + Math.cos(car.heading) * v * dt;
 
-    // wrap around city edges
-    const lim = halfCity + 6;
-    if (car.mesh.position.x > lim) car.mesh.position.x = -lim;
-    if (car.mesh.position.x < -lim) car.mesh.position.x = lim;
-    if (car.mesh.position.z > lim) car.mesh.position.z = -lim;
-    if (car.mesh.position.z < -lim) car.mesh.position.z = lim;
+    // BUILDING COLLISION: do not drive through buildings
+    if (!carCollidesAt(car, nx, nz)) {
+      car.mesh.position.x = nx;
+      car.mesh.position.z = nz;
+    } else {
+      // crash into building -> slow down and steer back to lane
+      car.speed *= 0.5;
+      car.steer *= -0.3; // push steer back toward road
+    }
+
+    // hard city boundary: cannot leave
+    car.mesh.position.x = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, car.mesh.position.x));
+    car.mesh.position.z = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, car.mesh.position.z));
 
     // visuals: body lean + wheel spin + front wheel steer
     const roll = -car.steer * Math.min(1, Math.abs(v) / 10) * 0.15;
