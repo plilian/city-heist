@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>City Heist - A GTA2 Style Game</title>
+<title>City Delivery - A Top-Down Mission Game</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1018; font-family: 'Arial', sans-serif; }
   #game { display: block; width: 100%; height: 100%; }
 
   /* HUD */
@@ -16,33 +16,36 @@
   }
   #topleft { position: absolute; top: 14px; left: 14px; }
   .badge {
-    display: inline-block; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.15);
+    display: inline-block; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15);
     padding: 6px 10px; border-radius: 6px; font-size: 13px; margin-bottom: 6px;
   }
   #money { font-size: 22px; font-weight: bold; color: #6dff8e; }
+  #timer { font-size: 18px; font-weight: bold; color: #ffd24a; }
+  #timer.warn { color: #ff5b5b; animation: pulse 0.6s infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
   #healthWrap { width: 160px; }
   #healthBarBg { width: 100%; height: 12px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; overflow: hidden; }
   #healthBar { height: 100%; width: 100%; background: linear-gradient(90deg,#ff3b3b,#ff8a3b,#6dff8e); transition: width .2s; }
 
+  /* Order ticket */
+  #orderTicket {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.2);
+    padding: 10px 18px; border-radius: 8px; text-align: center; min-width: 320px;
+  }
+  #orderTitle { font-size: 12px; letter-spacing: 2px; color: #ffd24a; text-transform: uppercase; }
+  #orderText { font-size: 16px; margin-top: 4px; }
+
   /* Minimap */
   #minimapWrap {
     position: absolute; top: 14px; right: 14px; width: 200px; height: 200px;
-    background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.25); border-radius: 10px; overflow: hidden;
+    background: rgba(0,0,0,0.6); border: 2px solid rgba(255,255,255,0.25); border-radius: 10px; overflow: hidden;
   }
   #minimap { display: block; width: 200px; height: 200px; }
 
-  /* Mission banner */
-  #missionBox {
-    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
-    background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15);
-    padding: 10px 18px; border-radius: 8px; text-align: center; min-width: 300px;
-  }
-  #missionTitle { font-size: 12px; letter-spacing: 2px; color: #ffd24a; text-transform: uppercase; }
-  #missionText { font-size: 16px; margin-top: 4px; }
-
   /* Center message */
   #centerMsg {
-    position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%);
+    position: absolute; top: 42%; left: 50%; transform: translate(-50%,-50%);
     font-size: 36px; font-weight: bold; text-align: center; opacity: 0; transition: opacity .4s;
   }
   #centerMsg.show { opacity: 1; }
@@ -66,14 +69,21 @@
     background: #ffd24a; color: #000; padding: 1px 6px; border-radius: 3px; font-weight: bold; margin: 0 2px;
   }
 
-  /* Start / End overlays */
+  /* Score / combo */
+  #deliveries {
+    position: absolute; bottom: 14px; right: 14px; font-size: 14px; color: #ddd;
+    background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 6px;
+  }
+  #deliveries b { color: #6dff8e; }
+
+  /* Overlays */
   .overlay {
     position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center; color: #fff;
-    background: radial-gradient(circle at center, #1a1a2e 0%, #000 100%);
+    background: radial-gradient(circle at center, #1a2230 0%, #050810 100%);
   }
   .overlay h1 { font-size: 64px; letter-spacing: 4px; color: #ffd24a; text-shadow: 0 4px 20px rgba(255,210,74,0.4); }
-  .overlay h2 { font-size: 24px; margin-top: 8px; color: #6dff8e; }
+  .overlay h2 { font-size: 22px; margin-top: 8px; color: #6dff8e; }
   .overlay p { max-width: 560px; margin: 20px 0; line-height: 1.6; color: #ccc; font-size: 15px; }
   .overlay .keys { display: flex; gap: 20px; margin: 16px 0; flex-wrap: wrap; justify-content: center; }
   .overlay .keys div { background: rgba(255,255,255,0.06); padding: 10px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
@@ -87,63 +97,60 @@
   .btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c9a23a; }
   .hidden { display: none !important; }
 
-/* Error display */
-#errorBox {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
-  background: #7a0000; color: #fff; font-family: monospace; font-size: 12px;
-  padding: 10px; max-height: 40vh; overflow: auto; display: none;
-}
-#errorBox.show { display: block; }
+  /* Error display */
+  #errorBox {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    background: #7a0000; color: #fff; font-family: monospace; font-size: 12px;
+    padding: 10px; max-height: 40vh; overflow: auto; display: none;
+  }
+  #errorBox.show { display: block; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 
-<!-- HUD -->
 <div id="hud" class="hidden">
   <div id="topleft">
     <div class="badge" id="money">$0</div><br>
-    <div class="badge" id="healthWrap">
-      <div id="healthBarBg"><div id="healthBar"></div></div>
-    </div><br>
-    <div class="badge" id="weapon">On Foot</div>
+    <div class="badge" id="timerWrap">⏱ <span id="timer">--</span></div><br>
+    <div class="badge" id="healthWrap"><div id="healthBarBg"><div id="healthBar"></div></div></div><br>
+    <div class="badge" id="status">On Foot</div>
   </div>
 
-  <div id="missionBox">
-    <div id="missionTitle">Mission</div>
-    <div id="missionText">Get to a car</div>
+  <div id="orderTicket">
+    <div id="orderTitle">Current Order</div>
+    <div id="orderText">Go to a shop to pick up an order</div>
   </div>
 
   <div id="minimapWrap"><canvas id="minimap" width="200" height="200"></canvas></div>
 
   <div id="prompt"></div>
   <div id="centerMsg"></div>
+  <div id="deliveries">Delivered: <b id="delivered">0</b></div>
 
   <div id="controls">
     <b>WASD</b> Move/Drive &nbsp;|&nbsp; <b>Shift</b> Sprint &nbsp;|&nbsp; <b>F</b> Enter/Exit Car &nbsp;|&nbsp; <b>Space</b> Handbrake
   </div>
 </div>
 
-<!-- Start screen -->
 <div id="startScreen" class="overlay">
-  <h1>CITY HEIST</h1>
-  <h2>A top-down driving game</h2>
-  <p>Welcome to the city, recruit. Your first job: jack a car from the streets and deliver it to the garage. Simple enough... if the cops don't spot you.</p>
+  <h1>CITY DELIVERY</h1>
+  <h2>Pick up orders. Deliver fast. Earn cash.</h2>
+  <p>You're a courier in a busy city. Pick up orders from shops (coffee, food, groceries) and deliver them to houses marked with a green marker before the timer runs out. Faster deliveries = bigger tips!</p>
   <div class="keys">
     <div><b>W A S D</b><br>Move / Drive</div>
     <div><b>SHIFT</b><br>Sprint</div>
     <div><b>F</b><br>Enter / Exit Car</div>
     <div><b>SPACE</b><br>Handbrake</div>
   </div>
-  <button class="btn" id="startBtn">START GAME</button>
+  <button class="btn" id="startBtn">START SHIFT</button>
 </div>
 
-<!-- End screen -->
 <div id="endScreen" class="overlay hidden">
-  <h1 id="endTitle">MISSION PASSED</h1>
-  <h2 id="endSub">Respect +</h2>
+  <h1 id="endTitle">SHIFT OVER</h1>
+  <h2 id="endSub"></h2>
   <p id="endText"></p>
-  <button class="btn" id="restartBtn">PLAY AGAIN</button>
+  <button class="btn" id="restartBtn">NEW SHIFT</button>
 </div>
 
 <div id="errorBox"></div>
@@ -160,422 +167,365 @@ function(t,e){"object"==typeof exports&&"undefined"!=typeof module?e(exports):"f
 
 // ===== Game code =====
 
-// Global error catcher - shows any JS errors on screen
+// ============================================================
+//  GLOBAL ERROR CATCHER
+// ============================================================
 window.addEventListener('error', (e) => {
   const box = document.getElementById('errorBox');
   box.classList.add('show');
   box.innerHTML += `<div>${e.message} <br> <small>${e.filename}:${e.lineno}</small></div>`;
 });
-window.addEventListener('unhandledrejection', (e) => {
-  const box = document.getElementById('errorBox');
-  box.classList.add('show');
-  box.innerHTML += `<div>PROMISE: ${e.reason}</div>`;
-});
-
-
 
 // ============================================================
-//  GLOBAL STATE
+//  THREE.JS BOOTSTRAP (using global THREE from inlined build)
 // ============================================================
-const STATE = {
-  running: false,
-  inCar: null,          // reference to car object when driving
-  health: 100,
-  money: 0,
-  mission: { id: 0, text: 'Find a car to steal', done: false, failed: false },
-  prompt: '',
-};
-
-// ============================================================
-//  RENDERER / SCENE / CAMERA
-// ============================================================
-const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('game'), antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1b2a);
-scene.fog = new THREE.Fog(0x0d1b2a, 80, 180);
+scene.background = new THREE.Color(0x0a1018);
+scene.fog = new THREE.Fog(0x0a1018, 70, 160);
 
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
-
-// Top-down angled camera (GTA2 style)
 const camOffset = new THREE.Vector3(0, 38, 26);
-// Position camera initially so the scene is visible behind the start screen
 camera.position.copy(new THREE.Vector3(16, 38, 42));
 camera.lookAt(16, 1, 22);
 
 // ============================================================
 //  LIGHTS
 // ============================================================
-const hemi = new THREE.HemisphereLight(0x9bb8ff, 0x404040, 0.7);
-scene.add(hemi);
-
+scene.add(new THREE.HemisphereLight(0x9bb8ff, 0x2a2a35, 0.7));
 const sun = new THREE.DirectionalLight(0xfff2d6, 1.1);
 sun.position.set(40, 80, 30);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -70;
-sun.shadow.camera.right = 70;
-sun.shadow.camera.top = 70;
-sun.shadow.camera.bottom = -70;
-sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 200;
+sun.shadow.camera.left = -70; sun.shadow.camera.right = 70;
+sun.shadow.camera.top = 70; sun.shadow.camera.bottom = -70;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 200;
 sun.shadow.bias = -0.0005;
 scene.add(sun);
 
 // ============================================================
-//  CITY GENERATION
+//  GAME STATE
 // ============================================================
-const CITY = {
-  size: 7,            // grid blocks per side
-  block: 24,          // size of each block
-  road: 8,            // road width
+const STATE = {
+  running: false,
+  inCar: null,
+  health: 100,
+  money: 0,
+  delivered: 0,
+  carrying: null,        // {shop, houseIndex, type, reward, timeLeft}
+  prompt: '',
+  gameOver: false,
 };
+
+// ============================================================
+//  CITY GRID
+// ============================================================
+const CITY = { size: 6, block: 24, road: 9 };
+const step = CITY.block + CITY.road;
+const start = -((CITY.size - 1) * step) / 2;
 const halfCity = (CITY.size * (CITY.block + CITY.road)) / 2;
+const cityBoundary = halfCity + CITY.road / 2 + 1;
 
-const collidables = [];   // {x,z,w,d,h,mesh} for buildings
-const cars = [];          // car objects
-const roadTiles = [];     // for minimap
+const collidables = [];
+const roadCenters = [];
+function roadCoord(g) { return start - CITY.block / 2 - CITY.road / 2 + g * step; }
+for (let g = 0; g <= CITY.size; g++) roadCenters.push(roadCoord(g));
+const roadHalf = CITY.road / 2;
 
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), groundMat);
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(400, 400),
+  new THREE.MeshStandardMaterial({ color: 0x1a1f28 })
+);
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Build the grid: blocks (with buildings) separated by roads
-function buildCity() {
-  const step = CITY.block + CITY.road;
-  const start = -((CITY.size - 1) * step) / 2;
+// ============================================================
+//  BUILD CITY (roads, sidewalks, blocks, buildings, shops, houses)
+// ============================================================
+const roadPlaneMat = new THREE.MeshStandardMaterial({ color: 0x181818 });
+const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x4a4f5a });
+const laneMat = new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.5 });
+const citySpan = CITY.size * step + CITY.road;
 
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-  const sidewalkMat = new THREE.MeshStandardMaterial({ color: 0x6a6a6a });
-  const laneMat = new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.5 });
-
-  // Road strips (horizontal & vertical) spanning whole city
-  const citySpan = CITY.size * step + CITY.road;
-
-  for (let i = 0; i < CITY.size; i++) {
-    const pos = start + i * step + CITY.block / 2;
-
-    // horizontal road center
-    const hRoad = new THREE.Mesh(new THREE.PlaneGeometry(citySpan, CITY.road), roadMat);
-    hRoad.rotation.x = -Math.PI / 2;
-    hRoad.position.set(0, 0.02, pos - CITY.block / 2 + (CITY.block + CITY.road) / 2 - CITY.road / 2);
-    // simpler: place roads between blocks
-  }
-
-  // Cleaner approach: loop over cells, place block + road around it
-  for (let gx = 0; gx < CITY.size; gx++) {
-    for (let gz = 0; gz < CITY.size; gz++) {
-      const cx = start + gx * step;
-      const cz = start + gz * step;
-
-      // Sidewalk slab (slightly bigger than building area)
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(CITY.block + 1.5, 0.4, CITY.block + 1.5), sidewalkMat);
-      slab.position.set(cx, 0.2, cz);
-      slab.receiveShadow = true;
-      scene.add(slab);
-
-      // Building(s) on top of block - 1 big or a few small
-      placeBuildings(cx, cz);
-
-      // Road tile (for minimap reference) - to the right and below each block
-      roadTiles.push({ x: cx + CITY.block / 2 + CITY.road / 2, z: cz });
-      roadTiles.push({ x: cx, z: cz + CITY.block / 2 + CITY.road / 2 });
-    }
-  }
-
-  // Lay continuous roads as big planes for nicer look
-  const roadPlaneMat = new THREE.MeshStandardMaterial({ color: 0x181818 });
-  // vertical roads
-  for (let gx = 0; gx <= CITY.size; gx++) {
-    const x = start - CITY.block / 2 - CITY.road / 2 + gx * step;
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(CITY.road, citySpan), roadPlaneMat);
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(x, 0.05, 0);
-    road.receiveShadow = true;
-    scene.add(road);
-  }
-  // horizontal roads
-  for (let gz = 0; gz <= CITY.size; gz++) {
-    const z = start - CITY.block / 2 - CITY.road / 2 + gz * step;
-    const road = new THREE.Mesh(new THREE.PlaneGeometry(citySpan, CITY.road), roadPlaneMat);
-    road.rotation.x = -Math.PI / 2;
-    road.position.set(0, 0.05, z);
-    road.receiveShadow = true;
-    scene.add(road);
-  }
-
-  // Lane markings (dashes) along roads
-  for (let gx = 0; gx <= CITY.size; gx++) {
-    const x = start - CITY.block / 2 - CITY.road / 2 + gx * step;
-    for (let d = -citySpan / 2; d < citySpan / 2; d += 4) {
-      const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 1.6), laneMat);
-      dash.rotation.x = -Math.PI / 2;
-      dash.position.set(x, 0.07, d);
-      scene.add(dash);
-    }
+// Roads as big planes
+for (let g = 0; g <= CITY.size; g++) {
+  const x = roadCoord(g);
+  const rv = new THREE.Mesh(new THREE.PlaneGeometry(CITY.road, citySpan), roadPlaneMat);
+  rv.rotation.x = -Math.PI / 2; rv.position.set(x, 0.05, 0); rv.receiveShadow = true; scene.add(rv);
+  const rh = new THREE.Mesh(new THREE.PlaneGeometry(citySpan, CITY.road), roadPlaneMat);
+  rh.rotation.x = -Math.PI / 2; rh.position.set(0, 0.05, x); rh.receiveShadow = true; scene.add(rh);
+}
+// Lane dashes
+for (let g = 0; g <= CITY.size; g++) {
+  const x = roadCoord(g);
+  for (let d = -citySpan / 2; d < citySpan / 2; d += 4) {
+    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 1.6), laneMat);
+    dash.rotation.x = -Math.PI / 2; dash.position.set(x, 0.07, d); scene.add(dash);
   }
 }
 
-const buildingColors = [0x8d6e63, 0x546e7a, 0x455a64, 0x7e57c2, 0x424242, 0x607d8b, 0xbcaaa4, 0xef5350, 0x26a69a];
-function placeBuildings(cx, cz) {
-  const pattern = Math.floor(Math.random() * 3);
-  const plot = CITY.block - 2;
+// ============================================================
+//  SHOPS & HOUSES
+// ============================================================
+const SHOPS = [
+  { name: 'Coffee Shop', color: 0x8d6e63, accent: 0xd7a86e, icon: '☕', menu: ['Latte','Espresso','Cappuccino'] },
+  { name: 'Burger Joint', color: 0xe64a19, accent: 0xffab40, icon: '🍔', menu: ['Burger','Fries','Combo'] },
+  { name: 'Supermarket', color: 0x00897b, accent: 0x80cbc4, icon: '🛒', menu: ['Groceries','Bread','Milk'] },
+  { name: 'Pizzeria', color: 0xd32f2f, accent: 0xff8a80, icon: '🍕', menu: ['Pizza','Pasta','Calzone'] },
+];
 
-  if (pattern === 0) {
-    // one big building
-    addBuilding(cx, cz, plot * 0.9, plot * 0.9, 8 + Math.random() * 16);
-  } else if (pattern === 1) {
-    // 2 buildings
-    addBuilding(cx - plot / 4, cz, plot * 0.45, plot * 0.9, 6 + Math.random() * 14);
-    addBuilding(cx + plot / 4, cz, plot * 0.45, plot * 0.9, 8 + Math.random() * 18);
-  } else {
-    // 4 smaller
-    const s = plot * 0.42;
-    addBuilding(cx - plot / 4, cz - plot / 4, s, s, 5 + Math.random() * 10);
-    addBuilding(cx + plot / 4, cz - plot / 4, s, s, 6 + Math.random() * 12);
-    addBuilding(cx - plot / 4, cz + plot / 4, s, s, 7 + Math.random() * 14);
-    addBuilding(cx + plot / 4, cz + plot / 4, s, s, 5 + Math.random() * 11);
-  }
-}
+const shops = [];   // {x, z, data, mesh, hasOrder}
+const houses = [];  // {x, z, mesh, hasOrder}
 
-function addBuilding(x, z, w, d, h) {
-  const color = buildingColors[Math.floor(Math.random() * buildingColors.length)];
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.85 });
-  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  b.position.set(x, h / 2 + 0.4, z);
-  b.castShadow = true;
-  b.receiveShadow = true;
-  scene.add(b);
+function makeBuilding(x, z, w, d, h, color, accent) {
+  const grp = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.85 }));
+  body.position.y = h / 2 + 0.4; body.castShadow = true; body.receiveShadow = true;
+  grp.add(body);
 
-  // simple roof detail
+  // roof cap
   const cap = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.8, d * 0.5),
     new THREE.MeshStandardMaterial({ color: 0x222222 }));
-  cap.position.set(x, h + 0.8, z);
-  scene.add(cap);
+  cap.position.y = h + 0.8; grp.add(cap);
 
-  // windows emissive strip (faked)
+  // windows
   const winMat = new THREE.MeshStandardMaterial({ color: 0xffe082, emissive: 0xffcc66, emissiveIntensity: 0.4 });
   for (let yy = 1.5; yy < h - 1; yy += 2.5) {
     const strip = new THREE.Mesh(new THREE.BoxGeometry(w * 1.01, 0.5, d * 1.01), winMat);
-    strip.position.set(x, yy, z);
-    scene.add(strip);
+    strip.position.y = yy; grp.add(strip);
   }
+  // door (accent color)
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.6, 0.2),
+    new THREE.MeshStandardMaterial({ color: accent }));
+  door.position.set(0, 1.2, d / 2 + 0.05); grp.add(door);
 
-  collidables.push({ x, z, w, d, h, mesh: b });
+  grp.position.set(x, 0, z);
+  scene.add(grp);
+  return { mesh: grp, body };
 }
 
-buildCity();
+// Place shops: 4 shops at 4 distinct blocks
+const shopPositions = [
+  { gx: 0, gz: 0 },
+  { gx: CITY.size - 1, gz: 0 },
+  { gx: 0, gz: CITY.size - 1 },
+  { gx: CITY.size - 1, gz: CITY.size - 1 },
+];
+shopPositions.forEach((pos, i) => {
+  const data = SHOPS[i];
+  const cx = start + pos.gx * step;
+  const cz = start + pos.gz * step;
+  const { mesh, body } = makeBuilding(cx, cz, 12, 12, 9, data.color, data.accent);
+
+  // sidewalk slab
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(CITY.block + 1.5, 0.4, CITY.block + 1.5), sidewalkMat);
+  slab.position.set(cx, 0.2, cz); slab.receiveShadow = true; scene.add(slab);
+
+  // shop sign (floating marker)
+  const sign = makeSign(data.icon, data.accent);
+  sign.position.set(cx, 11, cz);
+  scene.add(sign);
+
+  collidables.push({ x: cx, z: cz, w: 12, d: 12, h: 9 });
+  shops.push({ x: cx, z: cz, data, mesh, sign, hasOrder: true });
+});
+
+// Place houses in the remaining blocks (not shop blocks)
+const isShopBlock = (gx, gz) => shopPositions.some(p => p.gx === gx && p.gz === gz);
+let houseColor = 0x546e7a;
+const houseColors = [0x546e7a, 0x78909c, 0x455a64, 0x90a4ae, 0x607d8b, 0xbcaaa4];
+let houseIdx = 0;
+for (let gx = 0; gx < CITY.size; gx++) {
+  for (let gz = 0; gz < CITY.size; gz++) {
+    if (isShopBlock(gx, gz)) continue;
+    const cx = start + gx * step;
+    const cz = start + gz * step;
+
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(CITY.block + 1.5, 0.4, CITY.block + 1.5), sidewalkMat);
+    slab.position.set(cx, 0.2, cz); slab.receiveShadow = true; scene.add(slab);
+
+    // 2-4 houses per block
+    const count = 2 + Math.floor(Math.random() * 3);
+    const spots = [];
+    for (let s = 0; s < count; s++) {
+      const ox = (Math.random() - 0.5) * (CITY.block - 8);
+      const oz = (Math.random() - 0.5) * (CITY.block - 8);
+      const hw = 5 + Math.random() * 2;
+      const hd = 5 + Math.random() * 2;
+      const hh = 4 + Math.random() * 4;
+      const color = houseColors[houseIdx++ % houseColors.length];
+      makeBuilding(cx + ox, cz + oz, hw, hd, hh, color, 0xcfd8dc);
+      collidables.push({ x: cx + ox, z: cz + oz, w: hw, d: hd, h: hh });
+      spots.push({ x: cx + ox, z: cz + oz });
+    }
+    // register one delivery house per block
+    if (spots.length) {
+      const h = spots[Math.floor(Math.random() * spots.length)];
+      houses.push({ x: h.x, z: h.z, hasOrder: false });
+    }
+  }
+}
+
+function makeSign(text, color) {
+  const grp = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.5, 1.5, 0.4, 16),
+    new THREE.MeshBasicMaterial({ color })
+  );
+  ring.rotation.x = Math.PI / 2;
+  grp.add(ring);
+  return grp;
+}
 
 // ============================================================
-//  CITY BOUNDARY WALLS (invisible barriers)
+//  CITY BOUNDARY WALLS
 // ============================================================
-const cityBoundary = halfCity + CITY.road / 2 + 1; // just past the outer roads
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x333333, transparent: true, opacity: 0.15 });
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x2a3040 });
 const wallH = 4;
-// North wall
 const wallN = new THREE.Mesh(new THREE.BoxGeometry(cityBoundary * 2 + 4, wallH, 1), wallMat);
 wallN.position.set(0, wallH / 2, cityBoundary); scene.add(wallN);
-// South wall
 const wallS = wallN.clone(); wallS.position.z = -cityBoundary; scene.add(wallS);
-// East wall
 const wallE = new THREE.Mesh(new THREE.BoxGeometry(1, wallH, cityBoundary * 2 + 4), wallMat);
 wallE.position.set(cityBoundary, wallH / 2, 0); scene.add(wallE);
-// West wall
 const wallW = wallE.clone(); wallW.position.x = -cityBoundary; scene.add(wallW);
 
 // ============================================================
 //  PLAYER CHARACTER
 // ============================================================
 const player = new THREE.Group();
-const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1565c0 });
-const headMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
-const legMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
-
-const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), bodyMat);
-torso.position.y = 1.0; torso.castShadow = true;
-player.add(torso);
-const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), headMat);
-head.position.y = 1.7; head.castShadow = true;
-player.add(head);
-// arms
-const armL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), bodyMat);
+const pBodyMat = new THREE.MeshStandardMaterial({ color: 0x1565c0 });
+const pHeadMat = new THREE.MeshStandardMaterial({ color: 0xffccaa });
+const pLegMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), pBodyMat);
+torso.position.y = 1.0; torso.castShadow = true; player.add(torso);
+const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), pHeadMat);
+head.position.y = 1.7; head.castShadow = true; player.add(head);
+const armL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), pBodyMat);
 armL.position.set(-0.46, 1.0, 0); armL.castShadow = true; player.add(armL);
 const armR = armL.clone(); armR.position.x = 0.46; player.add(armR);
-// legs
-const legL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.6, 0.22), legMat);
+const legL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.6, 0.22), pLegMat);
 legL.position.set(-0.18, 0.3, 0); legL.castShadow = true; player.add(legL);
 const legR = legL.clone(); legR.position.x = 0.18; player.add(legR);
-
-// Player spawns ON a road intersection (NOT inside a building block).
-// Road intersections are at x,z = start - block/2 - road/2 + gx*step, e.g. 16, -16...
-// For a 7x7 city (step=32), x=16 and z=16 is a road intersection just SE of center.
 player.position.set(16, 0, 16);
 scene.add(player);
-
-// Debug: log that player loaded
-console.log('Player spawned at', player.position);
-
-// Player state
-const playerState = {
-  speed: 0,
-  walkPhase: 0,
-  facing: 0,
-};
+const playerState = { facing: 0, walkPhase: 0 };
 
 // ============================================================
-//  CARS
+//  CARS (player's delivery scooter/car + parked + traffic)
 // ============================================================
 const carColors = [0xd32f2f, 0x1976d2, 0x388e3c, 0xfbc02d, 0x7b1fa2, 0xffffff, 0x455a64];
+const allCars = [];
 
-function makeCar(x, z, color, isTarget = false) {
+function makeCar(x, z, color) {
   const car = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.7, 3.6),
     new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.4 }));
   body.position.y = 0.6; body.castShadow = true; car.add(body);
-
   const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 1.8),
     new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6, roughness: 0.2 }));
   cabin.position.set(0, 1.1, -0.1); car.add(cabin);
-
-  // lights
   const lightMat = new THREE.MeshStandardMaterial({ color: 0xffffcc, emissive: 0xffffaa, emissiveIntensity: 0.6 });
   const fl = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.1), lightMat);
   fl.position.set(-0.6, 0.6, 1.8); car.add(fl);
   const fr = fl.clone(); fr.position.x = 0.6; car.add(fr);
-
-  // wheels
   const wheelGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.3, 12);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-  const wheelPos = [[-0.9, 1.2], [0.9, 1.2], [-0.9, -1.2], [0.9, -1.2]];
   const wheelMeshes = [];
-  wheelPos.forEach(([wx, wz]) => {
-    // wrap wheel in a pivot so it can both spin (rotation.x) and steer (front only)
+  [[-0.9, 1.2], [0.9, 1.2], [-0.9, -1.2], [0.9, -1.2]].forEach(([wx, wz]) => {
     const pivot = new THREE.Group();
     pivot.position.set(wx, 0.35, wz);
     const w = new THREE.Mesh(wheelGeo, wheelMat);
-    w.rotation.z = Math.PI / 2;
-    pivot.add(w);
-    car.add(pivot);
+    w.rotation.z = Math.PI / 2; pivot.add(w); car.add(pivot);
     wheelMeshes.push({ pivot, mesh: w, isFront: wz > 0 });
   });
-
   car.position.set(x, 0, z);
   scene.add(car);
-
-  const carObj = {
-    mesh: car, body, color, isTarget,
-    vx: 0, vz: 0,
-    heading: Math.random() * Math.PI * 2,
-    speed: 0,
-    steer: 0,
-    width: 1.8, length: 3.6,
-    wheelSpin: 0,
-    wheelMeshes,
+  const obj = {
+    mesh: car, color, heading: 0, speed: 0, steer: 0,
+    width: 1.8, length: 3.6, wheelMeshes,
   };
-  car.rotation.y = carObj.heading;
-  cars.push(carObj);
-  return carObj;
+  car.rotation.y = obj.heading;
+  allCars.push(obj);
+  return obj;
 }
 
-// place some parked cars on roads
-const step = CITY.block + CITY.road;
-const start = -((CITY.size - 1) * step) / 2;
-for (let i = 0; i < 14; i++) {
-  const gx = Math.floor(Math.random() * CITY.size);
-  const gz = Math.floor(Math.random() * CITY.size);
-  const onVerticalRoad = Math.random() < 0.5;
-  const cx = start + gx * step;
-  const cz = start + gz * step;
-  let x, z, heading;
-  if (onVerticalRoad) {
-    x = cx + CITY.block / 2 + CITY.road / 2 - 1.5;
-    z = cz + (Math.random() - 0.5) * CITY.block;
-    heading = Math.PI / 2;
-  } else {
-    x = cx + (Math.random() - 0.5) * CITY.block;
-    z = cz + CITY.block / 2 + CITY.road / 2 - 1.5;
-    heading = 0;
-  }
-  makeCar(x, z, carColors[Math.floor(Math.random() * carColors.length)]);
+// player's delivery car near spawn
+const playerCar = makeCar(18, 18, 0xff9800);
+
+// parked cars on road edges
+for (let i = 0; i < 10; i++) {
+  const g = Math.floor(Math.random() * CITY.size);
+  const cx = start + g * step;
+  const cz = start + Math.floor(Math.random() * CITY.size) * step;
+  makeCar(cx + CITY.block/2 + CITY.road/2 - 1.5, cz + (Math.random()-0.5)*CITY.block, carColors[Math.floor(Math.random()*carColors.length)]);
 }
 
 // ============================================================
-//  ROAD NETWORK HELPERS (for NPC/traffic navigation)
+//  MARKERS (beacons over active shop/house)
 // ============================================================
-// Road centerlines run between blocks. For grid index g (0..CITY.size),
-// the road center coord is: start - block/2 - road/2 + g*step
-function roadCoord(g) {
-  return start - CITY.block / 2 - CITY.road / 2 + g * step;
+function makeBeacon(color) {
+  const grp = new THREE.Group();
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 6, 16),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.35 }));
+  cyl.position.y = 3; grp.add(cyl);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.2, 8, 24),
+    new THREE.MeshBasicMaterial({ color }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 6; grp.add(ring);
+  return { mesh: grp, cyl, ring };
 }
-// collect all road center coordinates (vertical & horizontal)
-const roadCenters = [];
-for (let g = 0; g <= CITY.size; g++) roadCenters.push(roadCoord(g));
 
-// is a point (x,z) on a road? (within road half-width of a centerline)
-const roadHalf = CITY.road / 2;
-function isOnRoad(x, z) {
-  let onV = false, onH = false;
-  for (const rc of roadCenters) {
-    if (Math.abs(x - rc) < roadHalf) onV = true;
-    if (Math.abs(z - rc) < roadHalf) onH = true;
-  }
-  return onV || onH;
-}
-// find nearest road center coordinate to a value
-function nearestRoad(val) {
-  let best = roadCenters[0], bd = Infinity;
-  for (const rc of roadCenters) {
-    const d = Math.abs(val - rc);
-    if (d < bd) { bd = d; best = rc; }
-  }
-  return best;
-}
+// Shop order markers (yellow)
+const shopBeacons = shops.map(s => {
+  const b = makeBeacon(0xffd24a);
+  b.mesh.position.set(s.x, 0, s.z);
+  scene.add(b.mesh);
+  return b;
+});
+// House delivery markers (green) - hidden until carrying an order
+const houseBeacons = houses.map(h => {
+  const b = makeBeacon(0x00ff88);
+  b.mesh.position.set(h.x, 0, h.z);
+  b.mesh.visible = false;
+  scene.add(b.mesh);
+  return b;
+});
 
 // ============================================================
 //  NPC PEDESTRIANS
 // ============================================================
-const npcColors = [0x8e24aa, 0x00897b, 0xe64a19, 0x3949ab, 0xfdd835, 0x6d4c41, 0x455a64, 0xad1457];
+const npcColors = [0x8e24aa, 0x00897b, 0xe64a19, 0x3949ab, 0xfdd835, 0x6d4c41, 0xad1457];
 const pedestrians = [];
 
 function makePedestrian() {
   const ped = new THREE.Group();
   const color = npcColors[Math.floor(Math.random() * npcColors.length)];
-  const skinTone = [0xffccaa, 0xe0ac69, 0xc68642, 0x8d5524][Math.floor(Math.random() * 4)];
-
-  const pBody = new THREE.MeshStandardMaterial({ color });
-  const pSkin = new THREE.MeshStandardMaterial({ color: skinTone });
-  const pLeg = new THREE.MeshStandardMaterial({ color: 0x263238 });
-
-  const t = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.32), pBody);
+  const skin = [0xffccaa, 0xe0ac69, 0xc68642][Math.floor(Math.random() * 3)];
+  const t = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.32), new THREE.MeshStandardMaterial({ color }));
   t.position.y = 0.95; t.castShadow = true; ped.add(t);
-  const h = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.32), pSkin);
-  h.position.y = 1.5; h.castShadow = true; ped.add(h);
-  const aL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, 0.14), pBody);
+  const h = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.34, 0.32), new THREE.MeshStandardMaterial({ color: skin }));
+  h.position.y = 1.5; ped.add(h);
+  const aL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, 0.14), new THREE.MeshStandardMaterial({ color }));
   aL.position.set(-0.36, 0.95, 0); ped.add(aL);
   const aR = aL.clone(); aR.position.x = 0.36; ped.add(aR);
-  const lL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), pLeg);
+  const lL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.5, 0.18), new THREE.MeshStandardMaterial({ color: 0x263238 }));
   lL.position.set(-0.14, 0.25, 0); ped.add(lL);
   const lR = lL.clone(); lR.position.x = 0.14; ped.add(lR);
 
-  // spawn on a sidewalk edge (just off a road)
-  const g = Math.floor(Math.random() * CITY.size);
-  const rc = roadCenters[1 + (g % (roadCenters.length - 1))];
+  // spawn on a sidewalk
+  const rc = roadCenters[1 + Math.floor(Math.random() * (roadCenters.length - 1))];
   const along = start + Math.random() * (CITY.size * step);
-  const side = Math.random() < 0.5 ? roadHalf + 1.2 : -(roadHalf + 1.2);
-  if (Math.random() < 0.5) {
-    ped.position.set(rc + side, 0, along);
-  } else {
-    ped.position.set(along, 0, rc + side);
-  }
+  const side = Math.random() < 0.5 ? roadHalf + 1.5 : -(roadHalf + 1.5);
+  if (Math.random() < 0.5) ped.position.set(rc + side, 0, along);
+  else ped.position.set(along, 0, rc + side);
   scene.add(ped);
-
   pedestrians.push({
     mesh: ped, legL: lL, legR: lR, armL: aL, armR: aR,
     dir: Math.random() * Math.PI * 2,
@@ -584,96 +534,101 @@ function makePedestrian() {
     turnTimer: 2 + Math.random() * 4,
   });
 }
-for (let i = 0; i < 35; i++) makePedestrian();
+for (let i = 0; i < 30; i++) makePedestrian();
 
 // ============================================================
-//  AI TRAFFIC CARS (drive along roads)
+//  AI TRAFFIC
 // ============================================================
 const trafficCars = [];
-
 function makeTrafficCar() {
   const car = makeCar(0, 0, carColors[Math.floor(Math.random() * carColors.length)]);
-  // place on a road centerline, aligned to it
   const vertical = Math.random() < 0.5;
-  const laneIdx = Math.floor(Math.random() * (roadCenters.length - 1)) + 1;
-  const rc = roadCenters[laneIdx];
+  const rc = roadCenters[1 + Math.floor(Math.random() * (roadCenters.length - 1))];
   const along = start + Math.random() * (CITY.size * step);
-  const laneOffset = 1.8; // right-hand lane offset
+  const laneOffset = 1.8;
+  car.aiVertical = vertical;
+  car.aiDir = Math.random() < 0.5 ? 1 : -1;
+  car.aiLaneOffset = car.aiDir * laneOffset;
   if (vertical) {
-    car.mesh.position.set(rc + laneOffset, 0, along);
-    car.heading = Math.PI / 2;  // facing +z
+    car.mesh.position.set(rc + car.aiLaneOffset, 0, along);
+    car.heading = car.aiDir > 0 ? Math.PI / 2 : -Math.PI / 2;
   } else {
-    car.mesh.position.set(along, 0, rc + laneOffset);
-    car.heading = 0;            // facing +x
+    car.mesh.position.set(along, 0, rc + car.aiLaneOffset);
+    car.heading = car.aiDir > 0 ? 0 : Math.PI;
   }
   car.mesh.rotation.y = car.heading;
   car.speed = 6 + Math.random() * 5;
-  car.aiVertical = vertical;
-  car.aiLaneOffset = laneOffset;
   car.aiRoadCoord = rc;
-  // direction sign (+1 or -1 along its axis)
-  car.aiDir = Math.random() < 0.5 ? 1 : -1;
-  if (car.aiDir < 0) {
-    car.heading += Math.PI;
-    car.mesh.rotation.y = car.heading;
-    // flip to opposite lane when going backwards
-    car.aiLaneOffset = -laneOffset;
-    if (vertical) car.mesh.position.x = rc + car.aiLaneOffset;
-    else car.mesh.position.z = rc + car.aiLaneOffset;
-  }
-  // AI navigation state
   car.aiTurning = false;
   car.aiTurnDir = 0;
-  // next intersection coordinate along travel axis (a road centerline ahead)
-  car.aiNextTurn = nearestRoad(along) + (car.aiDir > 0 ? (CITY.block + CITY.road) : -(CITY.block + CITY.road));
+  car.aiNextTurn = nearestRoad(along) + (car.aiDir > 0 ? step : -step);
   trafficCars.push(car);
-  return car;
 }
-for (let i = 0; i < 25; i++) makeTrafficCar();
+for (let i = 0; i < 22; i++) makeTrafficCar();
 
 // ============================================================
-//  GARAGE (delivery point) + TARGET CAR
+//  HELPERS
 // ============================================================
-const garage = new THREE.Group();
-const garageMat = new THREE.MeshStandardMaterial({ color: 0x424242 });
-const floor = new THREE.Mesh(new THREE.BoxGeometry(10, 0.2, 8), new THREE.MeshStandardMaterial({ color: 0xb71c1c }));
-floor.position.y = 0.1; floor.receiveShadow = true; garage.add(floor);
-// walls
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x616161 });
-const w1 = new THREE.Mesh(new THREE.BoxGeometry(10, 3, 0.4), wallMat); w1.position.set(0, 1.5, -4); garage.add(w1);
-const w2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 3, 8), wallMat); w2.position.set(-5, 1.5, 0); garage.add(w2);
-const w3 = w2.clone(); w3.position.x = 5; garage.add(w3);
-// roof
-const roof = new THREE.Mesh(new THREE.BoxGeometry(10, 0.3, 8), wallMat); roof.position.y = 3.1; garage.add(roof);
-// marker beacon
-const beaconMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, transparent: true, opacity: 0.4 });
-const beacon = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 8, 24), beaconMat);
-beacon.position.y = 4; garage.add(beacon);
-
-// place garage far from origin
-const garagePos = new THREE.Vector3(start + (CITY.size - 1) * step + CITY.block / 2 + CITY.road / 2, 0,
-                                     start + (CITY.size - 1) * step + CITY.block / 2 + CITY.road / 2);
-garage.position.copy(garagePos);
-scene.add(garage);
-
-// target car = a special sports car placed on a road intersection near the player
-const targetCar = makeCar(-16, 16, 0xfbc02d, true);
-// cylinder marker over target car
-const targetMarker = new THREE.Mesh(new THREE.CylinderGeometry(2, 2, 6, 16),
-  new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.35 }));
-targetMarker.position.y = 3;
-targetCar.mesh.add(targetMarker);
+function isOnRoad(x, z) {
+  for (const rc of roadCenters) {
+    if (Math.abs(x - rc) < roadHalf) return true;
+    if (Math.abs(z - rc) < roadHalf) return true;
+  }
+  return false;
+}
+function nearestRoad(val) {
+  let best = roadCenters[0], bd = Infinity;
+  for (const rc of roadCenters) { const d = Math.abs(val - rc); if (d < bd) { bd = d; best = rc; } }
+  return best;
+}
+function isOnSidewalk(x, z) {
+  for (const rc of roadCenters) {
+    const dx = Math.abs(x - rc);
+    if (dx > roadHalf + 0.3 && dx < roadHalf + 2.5) {
+      if (!inAnyBuilding(x, z)) return true;
+    }
+    const dz = Math.abs(z - rc);
+    if (dz > roadHalf + 0.3 && dz < roadHalf + 2.5) {
+      if (!inAnyBuilding(x, z)) return true;
+    }
+  }
+  return false;
+}
+function inAnyBuilding(x, z) {
+  for (const b of collidables) {
+    if (x > b.x - b.w/2 && x < b.x + b.w/2 && z > b.z - b.d/2 && z < b.z + b.d/2) return true;
+  }
+  return false;
+}
+function carCollidesAt(c, x, z) {
+  for (const b of collidables) {
+    const halfW = b.w / 2 + c.width / 2;
+    const halfD = b.d / 2 + c.length / 2;
+    if (x > b.x - halfW && x < b.x + halfW && z > b.z - halfD && z < b.z + halfD) return true;
+  }
+  return false;
+}
+function resolveBuildingCollision(pos, radius) {
+  for (const b of collidables) {
+    const halfW = b.w / 2 + radius;
+    const halfD = b.d / 2 + radius;
+    if (pos.x > b.x - halfW && pos.x < b.x + halfW && pos.z > b.z - halfD && pos.z < b.z + halfD) {
+      const penX = halfW - Math.abs(pos.x - b.x);
+      const penZ = halfD - Math.abs(pos.z - b.z);
+      if (penX < penZ) pos.x = b.x + Math.sign(pos.x - b.x) * halfW;
+      else pos.z = b.z + Math.sign(pos.z - b.z) * halfD;
+    }
+  }
+  pos.x = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, pos.x));
+  pos.z = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, pos.z));
+}
 
 // ============================================================
 //  INPUT
 // ============================================================
 const keys = {};
-window.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'KeyF') tryEnterExitCar();
-});
+window.addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'KeyF') tryEnterExitCar(); });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
-
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -681,30 +636,20 @@ window.addEventListener('resize', () => {
 });
 
 // ============================================================
-//  CAR ENTRY / EXIT
+//  CAR ENTRY/EXIT
 // ============================================================
 function tryEnterExitCar() {
-  if (!STATE.running) return;
+  if (!STATE.running || STATE.gameOver) return;
   if (STATE.inCar) {
-    // exit
     const car = STATE.inCar;
     player.position.copy(car.mesh.position);
     player.position.x += 1.5;
     player.visible = true;
     STATE.inCar = null;
     setPrompt('');
-    if (!STATE.mission.done) {
-      // if they exited the target car and it's near garage -> success handled in update
-      if (car === targetCar && !STATE.mission.failed) {
-        // nothing, handled by delivery check
-      } else if (car !== targetCar) {
-        setMission('Steal the yellow sports car and deliver it');
-      }
-    }
   } else {
-    // find nearest car within range
     let nearest = null, bestD = 3.5;
-    for (const c of cars) {
+    for (const c of allCars) {
       const d = c.mesh.position.distanceTo(player.position);
       if (d < bestD) { bestD = d; nearest = c; }
     }
@@ -712,79 +657,152 @@ function tryEnterExitCar() {
       STATE.inCar = nearest;
       player.visible = false;
       setPrompt('');
-      if (nearest === targetCar && !STATE.mission.done && STATE.mission.id === 0) {
-        setMission('Drive the car to the garage (green marker)');
-      }
     }
   }
 }
 
 // ============================================================
-//  COLLISION HELPERS
+//  ORDER SYSTEM
 // ============================================================
-function resolveBuildingCollision(pos, radius) {
-  for (const b of collidables) {
-    const halfW = b.w / 2 + radius;
-    const halfD = b.d / 2 + radius;
-    if (pos.x > b.x - halfW && pos.x < b.x + halfW &&
-        pos.z > b.z - halfD && pos.z < b.z + halfD) {
-      // push out along smallest penetration axis
-      const penX = halfW - Math.abs(pos.x - b.x);
-      const penZ = halfD - Math.abs(pos.z - b.z);
-      if (penX < penZ) {
-        pos.x = b.x + Math.sign(pos.x - b.x) * halfW;
-      } else {
-        pos.z = b.z + Math.sign(pos.z - b.z) * halfD;
+function generateOrder() {
+  // pick a random shop that has an order, and a random house
+  const shop = shops[Math.floor(Math.random() * shops.length)];
+  const houseIdx = Math.floor(Math.random() * houses.length);
+  const house = houses[houseIdx];
+  const type = shop.data.menu[Math.floor(Math.random() * shop.data.menu.length)];
+  const reward = 200 + Math.floor(Math.random() * 300);
+  STATE.carrying = { shop, houseIndex: houseIdx, type, reward, timeLeft: 90 };
+  // light up the target house beacon
+  houseBeacons.forEach(b => b.mesh.visible = false);
+  houseBeacons[houseIdx].mesh.visible = true;
+  updateOrderUI();
+}
+
+function completeDelivery() {
+  STATE.money += STATE.carrying.reward;
+  STATE.delivered++;
+  // tip for fast delivery
+  if (STATE.carrying.timeLeft > 60) STATE.money += 100;
+  showCenter('DELIVERED!', `+$${STATE.carrying.reward} ${STATE.carrying.type}`);
+  STATE.carrying = null;
+  houseBeacons.forEach(b => b.mesh.visible = false);
+  updateOrderUI();
+  // next order after a short delay
+  setTimeout(() => { if (STATE.running && !STATE.gameOver) generateOrder(); }, 1500);
+}
+
+function failOrder(reason) {
+  if (!STATE.carrying) return;
+  showCenter('ORDER FAILED', reason);
+  STATE.carrying = null;
+  houseBeacons.forEach(b => b.mesh.visible = false);
+  updateOrderUI();
+  setTimeout(() => { if (STATE.running && !STATE.gameOver) generateOrder(); }, 2000);
+}
+
+function updateOrderUI() {
+  const el = document.getElementById('orderText');
+  if (STATE.carrying) {
+    const h = houses[STATE.carrying.houseIndex];
+    el.innerHTML = `Deliver <b>${STATE.carrying.type}</b> from ${STATE.carrying.shop.data.name} → House`;
+  } else {
+    el.textContent = 'Go to a shop (yellow marker) to pick up an order';
+  }
+}
+
+// check for shop/house interaction
+function checkInteractions() {
+  if (STATE.inCar) { setPrompt(''); return; }
+  // if carrying an order -> check house delivery
+  if (STATE.carrying) {
+    const h = houses[STATE.carrying.houseIndex];
+    const d = Math.hypot(player.position.x - h.x, player.position.z - h.z);
+    if (d < 4) {
+      setPrompt('Press <kbd>F</kbd>... wait, press <kbd>E</kbd> to deliver');
+      // use E for delivery (different from F car action)
+    } else {
+      setPrompt('');
+    }
+  } else {
+    // check shop pickup
+    let nearShop = null, bestD = 4;
+    for (const s of shops) {
+      const d = Math.hypot(player.position.x - s.x, player.position.z - s.z);
+      if (d < bestD) { bestD = d; nearShop = s; }
+    }
+    if (nearShop) {
+      setPrompt(`Press <kbd>E</kbd> to pick up order from ${nearShop.data.name}`);
+    } else {
+      setPrompt('');
+    }
+  }
+}
+
+// E key for delivery/pickup (added after F is set up)
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'KeyE' && STATE.running && !STATE.gameOver) {
+    if (STATE.carrying) {
+      const h = houses[STATE.carrying.houseIndex];
+      const d = Math.hypot(player.position.x - h.x, player.position.z - h.z);
+      if (d < 4) completeDelivery();
+    } else {
+      // pick up from nearest shop
+      for (const s of shops) {
+        const d = Math.hypot(player.position.x - s.x, player.position.z - s.z);
+        if (d < 4) {
+          STATE.carrying = { shop: s, houseIndex: Math.floor(Math.random() * houses.length),
+            type: s.data.menu[Math.floor(Math.random() * s.data.menu.length)],
+            reward: 200 + Math.floor(Math.random() * 300), timeLeft: 90 };
+          const hi = STATE.carrying.houseIndex;
+          houseBeacons.forEach(b => b.mesh.visible = false);
+          houseBeacons[hi].mesh.visible = true;
+          updateOrderUI();
+          showCenter('ORDER UP!', `${s.data.name}: ${STATE.carrying.type}`);
+          break;
+        }
       }
     }
   }
-  // keep inside city boundary walls (hard clamp)
-  pos.x = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, pos.x));
-  pos.z = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, pos.z));
-}
-
-function carCollidesAt(c, x, z) {
-  for (const b of collidables) {
-    const halfW = b.w / 2 + c.width / 2;
-    const halfD = b.d / 2 + c.length / 2;
-    if (x > b.x - halfW && x < b.x + halfW &&
-        z > b.z - halfD && z < b.z + halfD) return true;
-  }
-  return false;
-}
+});
 
 // ============================================================
 //  UPDATE LOOP
 // ============================================================
 const clock = new THREE.Clock();
 let beaconTime = 0;
+let shiftTimer = 300; // 5 minute shift
 
 function update(dt) {
-  if (!STATE.running) return;
+  if (!STATE.running || STATE.gameOver) return;
   beaconTime += dt;
+  shiftTimer -= dt;
 
-  if (STATE.inCar) {
-    updateCar(STATE.inCar, dt);
-  } else {
-    updatePlayer(dt);
+  if (shiftTimer <= 0) { shiftTimer = 0; endShift(); return; }
+
+  if (STATE.carrying) {
+    STATE.carrying.timeLeft -= dt;
+    if (STATE.carrying.timeLeft <= 0) failOrder('Out of time!');
   }
 
-  // update NPCs and traffic (life in the city)
+  if (STATE.inCar) updateCar(STATE.inCar, dt);
+  else updatePlayer(dt);
+
   updatePedestrians(dt);
   updateTraffic(dt);
+  checkInteractions();
 
-  // animate mission markers
-  targetMarker.visible = !STATE.mission.done && !STATE.mission.failed;
-  targetMarker.scale.y = 1 + Math.sin(beaconTime * 4) * 0.2;
-  beacon.material.opacity = 0.25 + Math.abs(Math.sin(beaconTime * 2)) * 0.25;
-
-  // check delivery
-  if (STATE.inCar === targetCar && !STATE.mission.done && !STATE.mission.failed) {
-    const d = targetCar.mesh.position.distanceTo(garagePos);
-    if (d < 6) {
-      completeMission();
+  // animate beacons
+  shopBeacons.forEach(b => {
+    b.mesh.rotation.y += dt * 1.5;
+    b.cyl.material.opacity = 0.25 + Math.abs(Math.sin(beaconTime * 2)) * 0.25;
+  });
+  houseBeacons.forEach((b, i) => {
+    if (b.mesh.visible) {
+      b.mesh.rotation.y += dt * 1.5;
+      b.cyl.scale.y = 1 + Math.sin(beaconTime * 4) * 0.15;
+      b.cyl.material.opacity = 0.3 + Math.abs(Math.sin(beaconTime * 2)) * 0.25;
     }
-  }
+  });
 
   // camera follow
   const focus = STATE.inCar ? STATE.inCar.mesh.position : player.position;
@@ -801,93 +819,48 @@ function updatePlayer(dt) {
   if (keys['KeyS']) mvz += 1;
   if (keys['KeyA']) mvx -= 1;
   if (keys['KeyD']) mvx += 1;
-
-  if (mvx !== 0 || mvz !== 0) {
-    const len = Math.hypot(mvx, mvz);
-    mvx /= len; mvz /= len;
-    playerState.facing = Math.atan2(mvx, mvz) + Math.PI; // adjust
+  if (mvx || mvz) {
+    const len = Math.hypot(mvx, mvz); mvx /= len; mvz /= len;
+    playerState.facing = Math.atan2(mvx, mvz) + Math.PI;
     player.position.x += mvx * maxSpeed * dt;
     player.position.z += mvz * maxSpeed * dt;
     playerState.walkPhase += dt * (sprint ? 16 : 10);
-    // animate legs/arms
     const swing = Math.sin(playerState.walkPhase) * 0.4;
-    legL.rotation.x = swing;
-    legR.rotation.x = -swing;
-    armL.rotation.x = -swing;
-    armR.rotation.x = swing;
+    legL.rotation.x = swing; legR.rotation.x = -swing;
+    armL.rotation.x = -swing; armR.rotation.x = swing;
   } else {
     legL.rotation.x = legR.rotation.x = armL.rotation.x = armR.rotation.x = 0;
   }
   player.rotation.y = playerState.facing;
   resolveBuildingCollision(player.position, 0.5);
-
-  // near-car prompt
-  let nearCar = null, bestD = 3.5;
-  for (const c of cars) {
-    const d = c.mesh.position.distanceTo(player.position);
-    if (d < bestD) { bestD = d; nearCar = c; }
-  }
-  if (nearCar) {
-    if (nearCar === targetCar && !STATE.mission.done) {
-      setPrompt('Press <kbd>F</kbd> to steal the target car');
-    } else {
-      setPrompt('Press <kbd>F</kbd> to enter car');
-    }
-  } else {
-    setPrompt('');
-  }
 }
 
 function updateCar(car, dt) {
   const accel = keys['KeyW'] ? 22 : 0;
   const brake = keys['KeyS'] ? -14 : 0;
-  const steerInput = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0); // A=left(+), D=right(-)
+  const steerInput = (keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0);
   const handbrake = keys['Space'];
-
-  // --- longitudinal physics (engine + drag + friction) ---
   car.speed += accel * dt;
   if (brake) car.speed += brake * dt;
-  car.speed *= (handbrake ? 0.90 : 0.992);             // friction / handbrake
-  car.speed = Math.max(-10, Math.min(30, car.speed));  // clamp speed
-
-  // --- steering wheel angle (smooth, speed-sensitive) ---
-  // Max front-wheel angle ~26°. Reduced at high speed for stability.
-  const speedFactor = 1 - Math.min(0.7, Math.abs(car.speed) / 30);
-  const maxSteer = 0.45 * speedFactor;
+  car.speed *= (handbrake ? 0.90 : 0.992);
+  car.speed = Math.max(-10, Math.min(30, car.speed));
+  const maxSteer = 0.45 * (1 - Math.min(0.7, Math.abs(car.speed) / 30));
   const targetSteer = steerInput * maxSteer;
-  // steer eases toward target; returns to center when no input
-  const steerLerp = Math.min(1, dt * 6);
-  car.steer += (targetSteer - car.steer) * steerLerp;
+  car.steer += (targetSteer - car.steer) * Math.min(1, dt * 6);
   if (steerInput === 0) car.steer *= (1 - Math.min(1, dt * 8));
-
-  // --- bicycle model: yaw rate depends on speed & steer ---
-  // Only the front wheels steer; the body rotates at (v/L)*tan(steer).
-  const L = 3.0;                                       // wheelbase
-  const v = car.speed;
-  const yawRate = (v / L) * Math.tan(car.steer);       // rad/s
-  car.heading += yawRate * dt;
-
-  // --- move along the new heading ---
-  const fwdX = Math.sin(car.heading);
-  const fwdZ = Math.cos(car.heading);
-  const nx = car.mesh.position.x + fwdX * v * dt;
-  const nz = car.mesh.position.z + fwdZ * v * dt;
-
+  const L = 3.0, v = car.speed;
+  car.heading += (v / L) * Math.tan(car.steer) * dt;
+  const nx = car.mesh.position.x + Math.sin(car.heading) * v * dt;
+  const nz = car.mesh.position.z + Math.cos(car.heading) * v * dt;
   if (!carCollidesAt(car, nx, nz)) {
-    car.mesh.position.x = nx;
-    car.mesh.position.z = nz;
+    car.mesh.position.x = nx; car.mesh.position.z = nz;
   } else {
-    car.speed *= 0.25;     // crash -> bleed speed
-    car.steer *= 0.5;
+    car.speed *= 0.25; car.steer *= 0.5;
   }
-
-  // --- visuals: body lean (into the turn) ---
   const roll = -car.steer * Math.min(1, Math.abs(v) / 10) * 0.15;
   car.mesh.rotation.set(0, car.heading, 0);
   car.mesh.rotateZ(roll);
   car.mesh.position.y = 0;
-
-  // --- visuals: spin wheels, steer front wheels ---
   if (car.wheelMeshes) {
     const spin = v * dt * 3;
     for (const w of car.wheelMeshes) {
@@ -895,189 +868,87 @@ function updateCar(car, dt) {
       if (w.isFront) w.pivot.rotation.y = car.steer;
     }
   }
-
-  if (car === targetCar) targetMarker.visible = false;
 }
 
-// ============================================================
-//  NPC PEDESTRIAN MOVEMENT
-// ============================================================
 function updatePedestrians(dt) {
   for (const p of pedestrians) {
-    // walk forward in facing direction
     p.walkPhase += dt * p.speed * 3;
     const nx = p.mesh.position.x + Math.sin(p.dir) * p.speed * dt;
     const nz = p.mesh.position.z + Math.cos(p.dir) * p.speed * dt;
-
-    // keep on sidewalk ONLY (not roads, not buildings)
-    const onSidewalk = isOnSidewalk(nx, nz);
-    // also check not inside any building
-    let inBuilding = false;
-    for (const b of collidables) {
-      if (nx > b.x - b.w/2 && nx < b.x + b.w/2 &&
-          nz > b.z - b.d/2 && nz < b.z + b.d/2) {
-        inBuilding = true; break;
-      }
-    }
-    if (onSidewalk && !inBuilding) {
-      p.mesh.position.x = nx;
-      p.mesh.position.z = nz;
+    if (isOnSidewalk(nx, nz)) {
+      p.mesh.position.x = nx; p.mesh.position.z = nz;
     } else {
-      // turn back toward sidewalk — face nearest road center and walk parallel
       p.dir += Math.PI * (0.5 + Math.random() * 0.5);
     }
-
-    // hard boundary: cannot leave city
     p.mesh.position.x = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, p.mesh.position.x));
     p.mesh.position.z = Math.max(-cityBoundary + 1, Math.min(cityBoundary - 1, p.mesh.position.z));
-
-    // random direction changes
     p.turnTimer -= dt;
     if (p.turnTimer <= 0) {
       p.turnTimer = 2 + Math.random() * 5;
-      if (Math.random() < 0.3) {
-        p.dir += (Math.random() - 0.5) * Math.PI * 0.5;
-      }
+      if (Math.random() < 0.3) p.dir += (Math.random() - 0.5) * Math.PI * 0.5;
     }
-
-    // face direction of travel
     p.mesh.rotation.y = p.dir;
-
-    // leg/arm swing animation
     const swing = Math.sin(p.walkPhase) * 0.45;
-    p.legL.rotation.x = swing;
-    p.legR.rotation.x = -swing;
-    p.armL.rotation.x = -swing;
-    p.armR.rotation.x = swing;
+    p.legL.rotation.x = swing; p.legR.rotation.x = -swing;
+    p.armL.rotation.x = -swing; p.armR.rotation.x = swing;
   }
 }
 
-// sidewalk = the narrow strip just outside the road edge (between road and building block)
-function isOnSidewalk(x, z) {
-  for (const rc of roadCenters) {
-    // check if on the sidewalk band of a vertical road (x-near a road center)
-    const dx = Math.abs(x - rc);
-    if (dx > roadHalf + 0.5 && dx < roadHalf + 2.5) {
-      // must NOT be inside a building block
-      for (const b of collidables) {
-        if (x > b.x - b.w/2 - 0.5 && x < b.x + b.w/2 + 0.5 &&
-            z > b.z - b.d/2 - 0.5 && z < b.z + b.d/2 + 0.5) return false;
-      }
-      return true;
-    }
-    // check horizontal road (z-near a road center)
-    const dz = Math.abs(z - rc);
-    if (dz > roadHalf + 0.5 && dz < roadHalf + 2.5) {
-      for (const b of collidables) {
-        if (x > b.x - b.w/2 - 0.5 && x < b.x + b.w/2 + 0.5 &&
-            z > b.z - b.d/2 - 0.5 && z < b.z + b.d/2 + 0.5) return false;
-      }
-      return true;
-    }
-  }
-  return false;
-}
-
-// ============================================================
-//  AI TRAFFIC MOVEMENT
-// ============================================================
 function updateTraffic(dt) {
   for (const car of trafficCars) {
-    // Compute desired steering: stay in lane + avoid player/other cars ahead.
-    // Target lane center is car.aiRoadCoord; lateral axis is the OTHER axis.
     let lateralPos, lateralTarget;
-    if (car.aiVertical) {
-      lateralPos = car.mesh.position.x;
-      lateralTarget = car.aiRoadCoord + car.aiLaneOffset;
-    } else {
-      lateralPos = car.mesh.position.z;
-      lateralTarget = car.aiRoadCoord + car.aiLaneOffset;
-    }
-    // Heading we want the body to face based on travel direction
+    if (car.aiVertical) { lateralPos = car.mesh.position.x; lateralTarget = car.aiRoadCoord + car.aiLaneOffset; }
+    else { lateralPos = car.mesh.position.z; lateralTarget = car.aiRoadCoord + car.aiLaneOffset; }
     const desiredHeading = car.aiVertical
       ? (car.aiDir > 0 ? Math.PI / 2 : -Math.PI / 2)
       : (car.aiDir > 0 ? 0 : Math.PI);
-
-    // Lateral error -> small steer to correct drift back into the lane
     const latErr = lateralTarget - lateralPos;
-    // sign: turning toward the lane center
     let targetSteer = THREE.MathUtils.clamp(latErr * 0.15, -0.3, 0.3);
-
-    // Approach a junction (end of current road segment)? Pick a turn.
     const alongCoord = car.aiVertical ? car.mesh.position.z : car.mesh.position.x;
     const nearEnd = car.aiDir > 0 ? alongCoord > car.aiNextTurn - 2 : alongCoord < car.aiNextTurn + 2;
     if (nearEnd && !car.aiTurning) {
-      // choose: turn left, right, or continue at the next intersection
       const r = Math.random();
-      if (r < 0.4) { car.aiTurnDir = 1; car.aiTurning = true; }       // turn right
-      else if (r < 0.8) { car.aiTurnDir = -1; car.aiTurning = true; } // turn left
-      else { car.aiTurnDir = 0; }                                     // go straight
+      if (r < 0.4) { car.aiTurnDir = 1; car.aiTurning = true; }
+      else if (r < 0.8) { car.aiTurnDir = -1; car.aiTurning = true; }
+      else { car.aiTurnDir = 0; }
     }
-
-    // If turning at intersection, blend heading toward perpendicular
     if (car.aiTurning) {
-      // desired heading rotated by ±90°
       const turnHeading = desiredHeading + car.aiTurnDir * (Math.PI / 2);
-      // steer toward that
       let dh = turnHeading - car.heading;
-      // wrap to [-PI, PI]
       while (dh > Math.PI) dh -= Math.PI * 2;
       while (dh < -Math.PI) dh += Math.PI * 2;
       targetSteer = THREE.MathUtils.clamp(dh * 2, -0.5, 0.5);
-      // when nearly aligned, finalize the turn
       if (Math.abs(dh) < 0.1) {
         car.aiTurning = false;
         car.heading = turnHeading;
-        // switch axis & road coord for the new road
-        if (car.aiVertical) {
-          // was going vertical, now horizontal -> new road coord = old x
-          car.aiRoadCoord = car.mesh.position.x - car.aiLaneOffset;
-        } else {
-          car.aiRoadCoord = car.mesh.position.z - car.aiLaneOffset;
-        }
+        if (car.aiVertical) car.aiRoadCoord = car.mesh.position.x - car.aiLaneOffset;
+        else car.aiRoadCoord = car.mesh.position.z - car.aiLaneOffset;
         car.aiVertical = !car.aiVertical;
-        car.aiLaneOffset = car.aiDir * 1.8; // keep right depending on dir
-        // snap lateral coord to lane center
+        car.aiLaneOffset = car.aiDir * 1.8;
         if (car.aiVertical) car.mesh.position.x = car.aiRoadCoord + car.aiLaneOffset;
         else car.mesh.position.z = car.aiRoadCoord + car.aiLaneOffset;
-        // set next turn point along the new road
         car.aiNextTurn = nearestRoad(car.aiVertical ? car.mesh.position.z : car.mesh.position.x)
-                         + (car.aiDir > 0 ? CITY.block + CITY.road : -(CITY.block + CITY.road));
+                         + (car.aiDir > 0 ? step : -step);
       }
     } else {
-      // keep heading aligned to travel direction
       let dh = desiredHeading - car.heading;
       while (dh > Math.PI) dh -= Math.PI * 2;
       while (dh < -Math.PI) dh += Math.PI * 2;
       targetSteer += dh * 0.8;
     }
     targetSteer = THREE.MathUtils.clamp(targetSteer, -0.5, 0.5);
-
-    // Smooth steer
     car.steer += (targetSteer - car.steer) * Math.min(1, dt * 5);
-
-    // Bicycle model: same as player car
-    const L = 3.0;
-    const v = car.speed;
+    const L = 3.0, v = car.speed;
     car.heading += (v / L) * Math.tan(car.steer) * dt;
     const nx = car.mesh.position.x + Math.sin(car.heading) * v * dt;
     const nz = car.mesh.position.z + Math.cos(car.heading) * v * dt;
-
-    // BUILDING COLLISION: do not drive through buildings
     if (!carCollidesAt(car, nx, nz)) {
-      car.mesh.position.x = nx;
-      car.mesh.position.z = nz;
+      car.mesh.position.x = nx; car.mesh.position.z = nz;
     } else {
-      // crash into building -> slow down and steer back to lane
-      car.speed *= 0.5;
-      car.steer *= -0.3; // push steer back toward road
+      car.speed *= 0.5; car.steer *= -0.3;
     }
-
-    // hard city boundary: cannot leave
     car.mesh.position.x = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, car.mesh.position.x));
     car.mesh.position.z = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, car.mesh.position.z));
-
-    // visuals: body lean + wheel spin + front wheel steer
     const roll = -car.steer * Math.min(1, Math.abs(v) / 10) * 0.15;
     car.mesh.rotation.set(0, car.heading, 0);
     car.mesh.rotateZ(roll);
@@ -1092,58 +963,46 @@ function updateTraffic(dt) {
 }
 
 // ============================================================
-//  MISSION / HUD
+//  HUD / UI
 // ============================================================
-function setMission(text) {
-  STATE.mission.text = text;
-  document.getElementById('missionText').textContent = text;
-}
-
 function setPrompt(html) {
-  const el = document.getElementById('prompt');
   if (html === STATE.prompt) return;
   STATE.prompt = html;
+  const el = document.getElementById('prompt');
   el.innerHTML = html;
   el.classList.toggle('show', !!html);
 }
-
 function showCenter(text, sub = '') {
   const el = document.getElementById('centerMsg');
   el.innerHTML = text + (sub ? `<small>${sub}</small>` : '');
   el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2500);
+  setTimeout(() => el.classList.remove('show'), 2200);
 }
-
 function updateHUD() {
   document.getElementById('money').textContent = '$' + STATE.money;
   document.getElementById('healthBar').style.width = Math.max(0, STATE.health) + '%';
-  document.getElementById('weapon').textContent = STATE.inCar ? 'Driving' : 'On Foot';
+  document.getElementById('status').textContent = STATE.inCar ? 'Driving' : 'On Foot';
+  document.getElementById('delivered').textContent = STATE.delivered;
+  const t = Math.ceil(shiftTimer);
+  const m = Math.floor(t / 60), s = t % 60;
+  const timerEl = document.getElementById('timer');
+  timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+  timerEl.classList.toggle('warn', t < 30);
+  if (STATE.carrying) {
+    const ot = Math.ceil(STATE.carrying.timeLeft);
+    document.getElementById('orderText').innerHTML =
+      `Deliver <b>${STATE.carrying.type}</b> — <span style="color:${ot<20?'#ff5b5b':'#ffd24a'}">${ot}s</span> left`;
+  }
 }
 
-function completeMission() {
-  STATE.mission.done = true;
-  STATE.money += 5000;
-  showCenter('MISSION PASSED!', '+$5000  •  Respect +');
-  document.getElementById('missionTitle').textContent = 'Mission Complete';
-  setMission('Delivered! Well done.');
-  setTimeout(() => endGame(true), 2200);
-}
-
-function failMission(reason) {
-  if (STATE.mission.failed || STATE.mission.done) return;
-  STATE.mission.failed = true;
-  showCenter('MISSION FAILED', reason);
-  setTimeout(() => endGame(false, reason), 2000);
-}
-
-function endGame(win, reason = '') {
+function endShift() {
+  STATE.gameOver = true;
   STATE.running = false;
-  document.getElementById('endTitle').textContent = win ? 'MISSION PASSED' : 'MISSION FAILED';
-  document.getElementById('endTitle').style.color = win ? '#6dff8e' : '#ff5b5b';
-  document.getElementById('endSub').textContent = win ? 'You delivered the goods.' : reason;
-  document.getElementById('endText').textContent = win
-    ? `Cash earned: $${STATE.money}. The boss is pleased. Maybe he'll have more work soon...`
-    : 'Better luck next time, rookie. Try again?';
+  document.getElementById('endTitle').textContent = 'SHIFT OVER';
+  document.getElementById('endTitle').style.color = '#6dff8e';
+  document.getElementById('endSub').textContent = `You delivered ${STATE.delivered} orders!`;
+  document.getElementById('endText').textContent =
+    `Total earnings: $${STATE.money}. ${STATE.delivered >= 5 ? 'Excellent work, courier!' : 'Keep practicing to earn more.'}`;
   document.getElementById('endScreen').classList.remove('hidden');
 }
 
@@ -1152,75 +1011,49 @@ function endGame(win, reason = '') {
 // ============================================================
 const mmCanvas = document.getElementById('minimap');
 const mmCtx = mmCanvas.getContext('2d');
-const mmRange = 90; // world units shown
-
+const mmRange = 90;
 function drawMinimap() {
   const W = 200, H = 200;
   mmCtx.clearRect(0, 0, W, H);
-  mmCtx.fillStyle = '#222';
+  mmCtx.fillStyle = '#0e1218';
   mmCtx.fillRect(0, 0, W, H);
-
   const focus = STATE.inCar ? STATE.inCar.mesh.position : player.position;
-
-  // helper: world -> minimap
   const toMap = (wx, wz) => ({
     x: (wx - (focus.x - mmRange / 2)) / mmRange * W,
     y: (wz - (focus.z - mmRange / 2)) / mmRange * H,
   });
-
-  // roads (light grey grid)
-  mmCtx.strokeStyle = '#444';
-  mmCtx.lineWidth = 4;
-  const step = CITY.block + CITY.road;
-  const start = -((CITY.size - 1) * step) / 2;
+  // road grid
+  mmCtx.strokeStyle = '#2a2f38'; mmCtx.lineWidth = 4;
   for (let i = 0; i <= CITY.size; i++) {
-    const p1 = toMap(start - CITY.block / 2 - CITY.road / 2 + i * step, focus.z - mmRange / 2);
-    const p2 = toMap(start - CITY.block / 2 - CITY.road / 2 + i * step, focus.z + mmRange / 2);
+    const rc = roadCoord(i);
+    const p1 = toMap(rc, focus.z - mmRange/2);
+    const p2 = toMap(rc, focus.z + mmRange/2);
     mmCtx.beginPath(); mmCtx.moveTo(p1.x, p1.y); mmCtx.lineTo(p2.x, p2.y); mmCtx.stroke();
-    const q1 = toMap(focus.x - mmRange / 2, start - CITY.block / 2 - CITY.road / 2 + i * step);
-    const q2 = toMap(focus.x + mmRange / 2, start - CITY.block / 2 - CITY.road / 2 + i * step);
+    const q1 = toMap(focus.x - mmRange/2, rc);
+    const q2 = toMap(focus.x + mmRange/2, rc);
     mmCtx.beginPath(); mmCtx.moveTo(q1.x, q1.y); mmCtx.lineTo(q2.x, q2.y); mmCtx.stroke();
   }
-
   // buildings
-  mmCtx.fillStyle = '#777';
+  mmCtx.fillStyle = '#3a4050';
   for (const b of collidables) {
     const p = toMap(b.x, b.z);
-    if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10) continue;
-    mmCtx.fillRect(p.x - b.w / 2 / mmRange * W, p.y - b.d / 2 / mmRange * H, b.w / mmRange * W, b.d / mmRange * H);
+    if (p.x < -10 || p.x > W+10 || p.y < -10 || p.y > H+10) continue;
+    mmCtx.fillRect(p.x - b.w/2/mmRange*W, p.y - b.d/2/mmRange*H, b.w/mmRange*W, b.d/mmRange*H);
   }
-
-  // garage
-  const gp = toMap(garagePos.x, garagePos.z);
-  mmCtx.fillStyle = '#00ff88';
-  mmCtx.fillRect(gp.x - 4, gp.y - 3, 8, 6);
-
-  // target car
-  if (!STATE.mission.done && !STATE.mission.failed) {
-    const tp = toMap(targetCar.mesh.position.x, targetCar.mesh.position.z);
+  // shops (yellow)
+  for (const s of shops) {
+    const p = toMap(s.x, s.z);
     mmCtx.fillStyle = '#ffd24a';
-    mmCtx.beginPath(); mmCtx.arc(tp.x, tp.y, 4, 0, Math.PI * 2); mmCtx.fill();
+    mmCtx.fillRect(p.x - 4, p.y - 4, 8, 8);
   }
-
-  // pedestrians (small dots)
-  mmCtx.fillStyle = 'rgba(255,255,255,0.5)';
-  for (const p of pedestrians) {
-    const pp2 = toMap(p.mesh.position.x, p.mesh.position.z);
-    if (pp2.x >= 0 && pp2.x <= W && pp2.y >= 0 && pp2.y <= H) {
-      mmCtx.fillRect(pp2.x - 1, pp2.y - 1, 2, 2);
-    }
+  // target house (green)
+  if (STATE.carrying) {
+    const h = houses[STATE.carrying.houseIndex];
+    const p = toMap(h.x, h.z);
+    mmCtx.fillStyle = '#00ff88';
+    mmCtx.fillRect(p.x - 4, p.y - 4, 8, 8);
   }
-
-  // traffic cars (small colored dots)
-  for (const c of trafficCars) {
-    const cp = toMap(c.mesh.position.x, c.mesh.position.z);
-    if (cp.x >= 0 && cp.x <= W && cp.y >= 0 && cp.y <= H) {
-      mmCtx.fillStyle = '#9fd';
-      mmCtx.fillRect(cp.x - 1.5, cp.y - 1.5, 3, 3);
-    }
-  }
-
-  // player / car arrow
+  // player/car arrow
   const pp = toMap(focus.x, focus.z);
   const heading = STATE.inCar ? STATE.inCar.heading : playerState.facing;
   mmCtx.save();
@@ -1250,42 +1083,31 @@ animate();
 //  START / RESTART
 // ============================================================
 function resetGame() {
-  // reset state
-  STATE.inCar = null;
-  STATE.health = 100;
-  STATE.money = 0;
-  STATE.mission = { id: 0, text: 'Find and steal the yellow target car', done: false, failed: false };
+  STATE.inCar = null; STATE.health = 100; STATE.money = 0;
+  STATE.delivered = 0; STATE.carrying = null; STATE.gameOver = false;
   STATE.prompt = '';
-
-  // reset player (on road intersection)
-  player.position.set(16, 0, 16);
-  player.visible = true;
-
-  // reset target car position (on road intersection)
-  targetCar.mesh.position.set(-16, 0, 16);
-  targetCar.heading = 0;
-  targetCar.mesh.rotation.y = 0;
-  targetCar.speed = 0;
-
-  setMission(STATE.mission.text);
-  document.getElementById('missionTitle').textContent = 'Mission';
+  shiftTimer = 300;
+  player.position.set(16, 0, 16); player.visible = true;
+  playerCar.mesh.position.set(18, 0, 18);
+  playerCar.heading = 0; playerCar.speed = 0;
+  houseBeacons.forEach(b => b.mesh.visible = false);
+  updateOrderUI();
 }
-
 document.getElementById('startBtn').addEventListener('click', () => {
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   resetGame();
   STATE.running = true;
-  showCenter('GO!', 'Steal the yellow car');
+  setTimeout(generateOrder, 800);
+  showCenter('SHIFT STARTED!', '5 minutes — deliver as many as you can');
 });
-
 document.getElementById('restartBtn').addEventListener('click', () => {
   document.getElementById('endScreen').classList.add('hidden');
   resetGame();
   STATE.running = true;
-  showCenter('GO!', 'Steal the yellow car');
+  setTimeout(generateOrder, 800);
+  showCenter('SHIFT STARTED!', '5 minutes — deliver as many as you can');
 });
-
 
 </script>
 </body>
