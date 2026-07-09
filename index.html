@@ -128,11 +128,24 @@
     <div id="orderText">به یک مغازه برو تا سفارش بگیری</div>
   </div>
 
+  <!-- Wanted level (police stars) -->
+  <div id="wantedBox" class="badge" style="position:absolute; top:170px; right:14px; font-size:18px; color:#ff5b5b; display:none;">
+    <span id="wantedStars">⭐</span>
+  </div>
+
+  <!-- High score -->
+  <div id="highScoreBox" class="badge" style="position:absolute; top:14px; left:230px; color:#ffd24a;">
+    رکورد: <b id="highScore">۰</b>
+  </div>
+
   <div id="minimapWrap"><canvas id="minimap" width="200" height="200"></canvas></div>
 
   <div id="prompt"></div>
   <div id="centerMsg"></div>
   <div id="deliveries">تحویل شده: <b id="delivered">۰</b></div>
+
+  <!-- Sound toggle -->
+  <div id="soundBtn" class="badge" style="position:absolute; bottom:14px; left:240px; cursor:pointer; pointer-events:auto;">🔊 صدا</div>
 
   <div id="controls">
     <b>WASD</b> حرکت/رانندگی &nbsp;|&nbsp; <b>Shift</b> دویدن &nbsp;|&nbsp; <b>F</b> ماشین &nbsp;|&nbsp; <b>E</b> سفارش/تحویل &nbsp;|&nbsp; <b>Space</b> ترمز
@@ -142,7 +155,8 @@
 <div id="startScreen" class="overlay">
   <h1>پیکِ شهر</h1>
   <h2>سفارش بگیر، سریع تحویل بده، پول دربیار!</h2>
-  <p>تو یه پیک تو یه شهر شلوغی! از مغازه‌ها (قهوه‌خانه، همبرگری، سوپرمارکت، پیتزا فروشی) سفارش بگیر و قبل از تموم شدن وقت به خونه‌ی مشتری تحویل بده. هرچی سریع‌تر تحویل بدی، انعام بیشتری می‌گیری!</p>
+  <p>تو یه پیک تو یه شهر شلوغی! از مغازه‌ها (قهوه‌خانه، همبرگری، سوپرمارکت، پیتزا فروشی) سفارش بگیر و قبل از تموم شدن وقت به خونه‌ی مشتری تحویل بده. مراقب پلیس باش — اگه به ماشین‌ها یا عابرها بزنی، تعقیبت می‌کنن!</p>
+  <p style="color:#ffd24a;">رکورد شما: <b id="startHighScore">۰ تومان</b></p>
   <div class="keys">
     <div><b>WASD</b><br>حرکت / رانندگی</div>
     <div><b>Shift</b><br>دویدن</div>
@@ -220,7 +234,111 @@ scene.add(sun);
 const STATE = {
   running: false, inCar: null, health: 100, money: 0,
   delivered: 0, carrying: null, prompt: '', gameOver: false,
+  wanted: 0,            // 0-3 police wanted level
+  wantedTimer: 0,       // cooldown timer to reduce wanted
+  crashCooldown: 0,     // prevent health drain every frame on crash
+  soundOn: true,
+  highScore: parseInt(localStorage.getItem('cityHeistHighScore') || '0'),
 };
+
+// ============================================================
+//  SOUND SYSTEM (Web Audio API - procedural, no files needed)
+// ============================================================
+let audioCtx = null;
+let engineOsc = null, engineGain = null;
+function initAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch (e) { console.log('Audio not supported'); }
+}
+function playTone(freq, duration, type = 'sine', volume = 0.15) {
+  if (!STATE.soundOn || !audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+}
+function playChord(freqs, duration, type = 'sine', volume = 0.12) {
+  freqs.forEach(f => playTone(f, duration, type, volume));
+}
+// Sound effects
+const SFX = {
+  delivery() {
+    // happy ascending chord
+    playChord([523, 659, 784], 0.4, 'triangle', 0.15);
+    setTimeout(() => playChord([659, 784, 988], 0.4, 'triangle', 0.12), 120);
+  },
+  pickup() {
+    playTone(880, 0.1, 'square', 0.1);
+    setTimeout(() => playTone(1175, 0.15, 'square', 0.1), 80);
+  },
+  crash() {
+    // low noise burst
+    if (!STATE.soundOn || !audioCtx) return;
+    const bufferSize = audioCtx.sampleRate * 0.3;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass'; filter.frequency.value = 400;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.25;
+    noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+    noise.start();
+  },
+  fail() {
+    playTone(220, 0.2, 'sawtooth', 0.12);
+    setTimeout(() => playTone(165, 0.3, 'sawtooth', 0.12), 150);
+  },
+  siren() {
+    if (!STATE.soundOn || !audioCtx) return;
+    playTone(700, 0.3, 'sine', 0.08);
+    setTimeout(() => playTone(500, 0.3, 'sine', 0.08), 200);
+  },
+  win() {
+    playChord([523, 659, 784, 1047], 0.5, 'triangle', 0.15);
+  },
+};
+function startEngineSound() {
+  if (!STATE.soundOn || !audioCtx || engineOsc) return;
+  engineOsc = audioCtx.createOscillator();
+  engineGain = audioCtx.createGain();
+  engineOsc.type = 'sawtooth';
+  engineOsc.frequency.value = 60;
+  engineGain.gain.value = 0;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass'; filter.frequency.value = 300;
+  engineOsc.connect(filter); filter.connect(engineGain); engineGain.connect(audioCtx.destination);
+  engineOsc.start();
+}
+function updateEngineSound(speed) {
+  if (!engineOsc) return;
+  if (!STATE.soundOn) { engineGain.gain.value = 0; return; }
+  engineOsc.frequency.value = 60 + Math.abs(speed) * 6;
+  engineGain.gain.value = Math.min(0.06, 0.02 + Math.abs(speed) * 0.003);
+}
+function stopEngineSound() {
+  if (engineGain) engineGain.gain.value = 0;
+}
+
+// Sound toggle button
+document.getElementById('soundBtn').addEventListener('click', () => {
+  STATE.soundOn = !STATE.soundOn;
+  document.getElementById('soundBtn').textContent = STATE.soundOn ? '🔊 صدا' : '🔇 بی‌صدا';
+  if (!STATE.soundOn) stopEngineSound();
+  localStorage.setItem('cityHeistSound', STATE.soundOn ? '1' : '0');
+});
+// restore sound preference
+STATE.soundOn = localStorage.getItem('cityHeistSound') !== '0';
+document.getElementById('soundBtn').textContent = STATE.soundOn ? '🔊 صدا' : '🔇 بی‌صدا';
 
 // ============================================================
 //  CITY GRID
@@ -298,8 +416,61 @@ for (let g = 0; g <= CITY.size; g++) {
 }
 
 // ============================================================
-//  SHOPS (better designed)
+//  TRAFFIC LIGHTS at intersections
 // ============================================================
+const trafficLights = [];
+const tlPoleMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.6 });
+const tlRedMat = new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0x330000 });
+const tlYellowMat = new THREE.MeshStandardMaterial({ color: 0x555500, emissive: 0x333300 });
+const tlGreenMat = new THREE.MeshStandardMaterial({ color: 0x005500, emissive: 0x003300 });
+const tlOnRed = new THREE.MeshStandardMaterial({ color: 0xff2222, emissive: 0xff0000, emissiveIntensity: 1 });
+const tlOnGreen = new THREE.MeshStandardMaterial({ color: 0x22ff22, emissive: 0x00ff00, emissiveIntensity: 1 });
+
+function makeTrafficLight(x, z, phase) {
+  const grp = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 5, 8), tlPoleMat);
+  pole.position.y = 2.5; grp.add(pole);
+  // arm
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 1.5), tlPoleMat);
+  arm.position.set(0, 4.5, 0.75); grp.add(arm);
+  // housing
+  const house_ = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.4, 0.4), tlPoleMat);
+  house_.position.set(0, 3.5, 1.3); grp.add(house_);
+  // 3 lights
+  const red = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), tlRedMat);
+  red.position.set(0, 3.9, 1.5); grp.add(red);
+  const yellow = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), tlYellowMat);
+  yellow.position.set(0, 3.5, 1.5); grp.add(yellow);
+  const green = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), tlGreenMat);
+  green.position.set(0, 3.1, 1.5); grp.add(green);
+  grp.position.set(x, 0, z);
+  scene.add(grp);
+  trafficLights.push({ mesh: grp, red, yellow, green, phase, x, z });
+}
+// place a traffic light near each intersection corner (only on some intersections to avoid clutter)
+for (let g = 0; g < CITY.size; g++) {
+  for (let g2 = 0; g2 < CITY.size; g2++) {
+    if ((g + g2) % 2 !== 0) continue;
+    const cx = roadCoord(g), cz = roadCoord(g2);
+    const off = roadHalf + 1.5;
+    // place at corner of intersection
+    makeTrafficLight(cx - off, cz - off, (g + g2) % 3);
+  }
+}
+
+function updateTrafficLights(time) {
+  // cycle: green(5s) -> yellow(1.5s) -> red(5s), staggered by phase
+  for (const tl of trafficLights) {
+    const cycle = ((time + tl.phase * 2.2) % 11.5);
+    if (cycle < 5) {
+      tl.red.material = tlRedMat; tl.yellow.material = tlYellowMat; tl.green.material = tlOnGreen;
+    } else if (cycle < 6.5) {
+      tl.red.material = tlRedMat; tl.yellow.material = new THREE.MeshStandardMaterial({ color: 0xffff22, emissive: 0xffff00, emissiveIntensity: 1 }); tl.green.material = tlGreenMat;
+    } else {
+      tl.red.material = tlOnRed; tl.yellow.material = tlYellowMat; tl.green.material = tlGreenMat;
+    }
+  }
+}
 const SHOPS = [
   { name: 'قهوه‌خانه', color: 0x6d4c41, accent: 0xd7a86e, signColor: 0xffffff, menu: ['لاته', 'اسپرسو', 'کاپوچینو'] },
   { name: 'همبرگری', color: 0xc62828, accent: 0xffab40, signColor: 0xffecb3, menu: ['همبرگر', 'سیب‌زمینی', 'ترکیبی'] },
@@ -699,6 +870,144 @@ function makeTrafficCar() {
 for (let i = 0; i < 24; i++) makeTrafficCar();
 
 // ============================================================
+//  POLICE CARS (spawn when wanted level > 0)
+// ============================================================
+const policeCars = [];
+const sirenLightMatA = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 1 });
+const sirenLightMatB = new THREE.MeshStandardMaterial({ color: 0x0000ff, emissive: 0x0000ff, emissiveIntensity: 1 });
+
+function makePoliceCar(x, z) {
+  const car = new THREE.Group();
+  // white body
+  const chassis = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.5, 3.8),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.5, roughness: 0.35 }));
+  chassis.position.y = 0.55; chassis.castShadow = true; car.add(chassis);
+  // black/red police livery stripe
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.25, 3.4),
+    new THREE.MeshStandardMaterial({ color: 0x1565c0 }));
+  stripe.position.y = 0.6; car.add(stripe);
+  const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.6, 2.0),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.7, roughness: 0.15 }));
+  cabin.position.set(0, 1.1, -0.15); car.add(cabin);
+  // siren bar on roof
+  const sirenL = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.3), sirenLightMatA);
+  sirenL.position.set(-0.3, 1.45, 0); car.add(sirenL);
+  const sirenR = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.2, 0.3), sirenLightMatB);
+  sirenR.position.set(0.3, 1.45, 0); car.add(sirenR);
+  // headlights
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffcc, emissiveIntensity: 0.9 });
+  const hl = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.1), headMat);
+  hl.position.set(-0.65, 0.6, 1.92); car.add(hl);
+  const hr = hl.clone(); hr.position.x = 0.65; car.add(hr);
+  // wheels
+  const wheelGeo = new THREE.CylinderGeometry(0.38, 0.38, 0.32, 16);
+  const tireMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a });
+  const wheelMeshes = [];
+  [[-0.95, 1.25], [0.95, 1.25], [-0.95, -1.25], [0.95, -1.25]].forEach(([wx, wz]) => {
+    const pivot = new THREE.Group(); pivot.position.set(wx, 0.38, wz);
+    const tire = new THREE.Mesh(wheelGeo, tireMat); tire.rotation.z = Math.PI / 2; pivot.add(tire);
+    car.add(pivot);
+    wheelMeshes.push({ pivot, mesh: tire, isFront: wz > 0 });
+  });
+  car.position.set(x, 0, z);
+  scene.add(car);
+  return { mesh: car, heading: 0, speed: 0, steer: 0, width: 1.9, length: 3.8, wheelMeshes, sirenL, sirenR, sirenFlash: 0 };
+}
+
+function spawnPoliceIfNeeded() {
+  // number of police = wanted level
+  while (policeCars.length < STATE.wanted) {
+    // spawn at edge of map near player
+    const ang = Math.random() * Math.PI * 2;
+    const r = 40;
+    const focus = STATE.inCar ? STATE.inCar.mesh.position : player.position;
+    const px = focus.x + Math.cos(ang) * r;
+    const pz = focus.z + Math.sin(ang) * r;
+    const cop = makePoliceCar(px, pz);
+    cop.heading = Math.atan2(focus.x - px, focus.z - pz);
+    cop.mesh.rotation.y = cop.heading;
+    cop.speed = 8;
+    policeCars.push(cop);
+  }
+  while (policeCars.length > STATE.wanted) {
+    const cop = policeCars.pop();
+    scene.remove(cop.mesh);
+  }
+}
+
+function updatePolice(dt) {
+  const focus = STATE.inCar ? STATE.inCar.mesh.position : player.position;
+  for (const cop of policeCars) {
+    // chase player: steer toward player
+    const dx = focus.x - cop.mesh.position.x;
+    const dz = focus.z - cop.mesh.position.z;
+    const targetAngle = Math.atan2(dx, dz);
+    let dh = targetAngle - cop.heading;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    // steer toward player
+    const targetSteer = THREE.MathUtils.clamp(dh * 2, -0.5, 0.5);
+    cop.steer += (targetSteer - cop.steer) * Math.min(1, dt * 4);
+    cop.speed = Math.min(14, cop.speed + 12 * dt);
+    const L = 3.0, v = cop.speed;
+    cop.heading += (v / L) * Math.tan(cop.steer) * dt;
+    const nx = cop.mesh.position.x + Math.sin(cop.heading) * v * dt;
+    const nz = cop.mesh.position.z + Math.cos(cop.heading) * v * dt;
+    if (!carCollidesAt(cop, nx, nz)) {
+      cop.mesh.position.x = nx; cop.mesh.position.z = nz;
+    } else {
+      cop.speed *= 0.4;
+    }
+    cop.mesh.position.x = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, cop.mesh.position.x));
+    cop.mesh.position.z = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, cop.mesh.position.z));
+    cop.mesh.rotation.set(0, cop.heading, 0);
+    // flash siren
+    cop.sirenFlash += dt * 8;
+    const flash = Math.floor(cop.sirenFlash) % 2 === 0;
+    cop.sirenL.visible = flash;
+    cop.sirenR.visible = !flash;
+    // siren sound (throttled)
+    if (cop.sirenFlash % 30 < dt * 8) SFX.siren();
+    // spin wheels
+    if (cop.wheelMeshes) {
+      for (const w of cop.wheelMeshes) {
+        w.mesh.rotation.x += v * dt * 3;
+        if (w.isFront) w.pivot.rotation.y = cop.steer;
+      }
+    }
+    // catch player: if very close, damage
+    const d = cop.mesh.position.distanceTo(focus);
+    if (d < 3 && STATE.crashCooldown <= 0) {
+      STATE.health -= 10;
+      STATE.crashCooldown = 1.5;
+      SFX.crash();
+      showCenter('پلیس گرفتنت!', '-۱۰ جان');
+      if (STATE.health <= 0) { bustPlayer(); }
+    }
+  }
+}
+
+function bustPlayer() {
+  STATE.gameOver = true; STATE.running = false;
+  document.getElementById('endTitle').textContent = 'دستگیر شدی!';
+  document.getElementById('endTitle').style.color = '#ff5b5b';
+  document.getElementById('endSub').textContent = 'پلیس تو رو دستگیر کرد';
+  document.getElementById('endText').textContent =
+    `${faNum(STATE.delivered)} سفارش تحویل دادی و ${faNum(STATE.money)} تومان درآوردی. دفعه بعد مراقب‌تر باش!`;
+  document.getElementById('endScreen').classList.remove('hidden');
+}
+
+function addWanted(amount) {
+  STATE.wanted = Math.min(3, STATE.wanted + amount);
+  STATE.wantedTimer = 15; // 15 seconds to cool down
+  if (STATE.wanted > 0) {
+    document.getElementById('wantedBox').style.display = 'inline-block';
+    document.getElementById('wantedStars').textContent = '⭐'.repeat(STATE.wanted);
+  }
+  spawnPoliceIfNeeded();
+}
+
+// ============================================================
 //  HELPERS
 // ============================================================
 function isOnRoad(x, z) {
@@ -778,6 +1087,7 @@ function tryEnterExitCar() {
     player.position.x += 1.5;
     player.visible = true;
     STATE.inCar = null;
+    stopEngineSound();
     setPrompt('');
   } else {
     let nearest = null, bestD = 4;
@@ -788,6 +1098,7 @@ function tryEnterExitCar() {
     if (nearest) {
       STATE.inCar = nearest;
       player.visible = false;
+      startEngineSound();
       setPrompt('');
     }
   }
@@ -821,6 +1132,7 @@ function startOrder(shop) {
   houseBeacons.forEach(b => b.mesh.visible = false);
   houseBeacons[houseIndex].mesh.visible = true;
   showCenter('سفارش گرفتی!', `${shop.data.name}: ${STATE.carrying.type}`);
+  SFX.pickup();
 }
 
 function completeDelivery() {
@@ -831,6 +1143,7 @@ function completeDelivery() {
   showCenter('تحویل شد!', `+${reward.toLocaleString('fa-IR')} تومان`);
   STATE.carrying = null;
   houseBeacons.forEach(b => b.mesh.visible = false);
+  SFX.delivery();
 }
 
 function checkInteractions() {
@@ -872,10 +1185,24 @@ function update(dt) {
     }
   }
 
-  if (STATE.inCar) updateCar(STATE.inCar, dt);
-  else updatePlayer(dt);
+  if (STATE.inCar) { updateCar(STATE.inCar, dt); updateEngineSound(STATE.inCar.speed); }
+  else { updatePlayer(dt); stopEngineSound(); }
   updatePedestrians(dt);
   updateTraffic(dt);
+  updateTrafficLights(beaconTime);
+  // police + wanted system
+  if (STATE.crashCooldown > 0) STATE.crashCooldown -= dt;
+  if (STATE.wanted > 0) {
+    STATE.wantedTimer -= dt;
+    if (STATE.wantedTimer <= 0) {
+      STATE.wanted--;
+      STATE.wantedTimer = 15;
+      if (STATE.wanted === 0) document.getElementById('wantedBox').style.display = 'none';
+      else document.getElementById('wantedStars').textContent = '⭐'.repeat(STATE.wanted);
+      spawnPoliceIfNeeded();
+    }
+  }
+  updatePolice(dt);
   checkInteractions();
 
   // animate beacons
@@ -944,7 +1271,54 @@ function updateCar(car, dt) {
   if (!carCollidesAt(car, nx, nz)) {
     car.mesh.position.x = nx; car.mesh.position.z = nz;
   } else {
+    // crash into building
     car.speed *= 0.25; car.steer *= 0.5;
+    if (Math.abs(v) > 5 && STATE.crashCooldown <= 0) {
+      STATE.health -= Math.floor(Math.abs(v) * 1.5);
+      STATE.crashCooldown = 1.0;
+      addWanted(1);
+      SFX.crash();
+      showCenter('تصادف!', `-${Math.floor(Math.abs(v) * 1.5)} جان`);
+      if (STATE.health <= 0) { STATE.health = 0; endShift(); }
+    }
+  }
+
+  // check hitting pedestrians while driving
+  if (Math.abs(v) > 3) {
+    for (const p of pedestrians) {
+      const d = Math.hypot(p.mesh.position.x - car.mesh.position.x, p.mesh.position.z - car.mesh.position.z);
+      if (d < 2 && STATE.crashCooldown <= 0) {
+        STATE.health -= 15;
+        STATE.crashCooldown = 1.5;
+        addWanted(2);
+        SFX.crash();
+        showCenter('عابر زدی!', '-۱۵ جان ⭐⭐');
+        // push pedestrian away
+        p.dir = car.heading + Math.PI;
+        p.mesh.position.x += Math.sin(p.dir) * 3;
+        p.mesh.position.z += Math.cos(p.dir) * 3;
+        if (STATE.health <= 0) { STATE.health = 0; endShift(); }
+        break;
+      }
+    }
+  }
+
+  // check hitting traffic cars
+  if (Math.abs(v) > 4) {
+    for (const tc of trafficCars) {
+      const d = Math.hypot(tc.mesh.position.x - car.mesh.position.x, tc.mesh.position.z - car.mesh.position.z);
+      if (d < 3 && STATE.crashCooldown <= 0) {
+        STATE.health -= Math.floor(Math.abs(v) * 1.2);
+        STATE.crashCooldown = 1.0;
+        addWanted(1);
+        SFX.crash();
+        showCenter('تصادف با ماشین!', `-${Math.floor(Math.abs(v) * 1.2)} جان ⭐`);
+        car.speed *= 0.3;
+        tc.speed *= 0.2;
+        if (STATE.health <= 0) { STATE.health = 0; endShift(); }
+        break;
+      }
+    }
   }
   const roll = -car.steer * Math.min(1, Math.abs(v) / 10) * 0.15;
   car.mesh.rotation.set(0, car.heading, 0);
@@ -1090,6 +1464,7 @@ function updateHUD() {
   document.getElementById('healthBar').style.width = Math.max(0, STATE.health) + '%';
   document.getElementById('status').textContent = STATE.inCar ? 'در حال رانندگی' : 'پیاده';
   document.getElementById('delivered').textContent = faNum(STATE.delivered);
+  document.getElementById('highScore').textContent = faNum(STATE.highScore) + ' تومان';
   const t = Math.ceil(shiftTimer);
   const m = Math.floor(t / 60), s = t % 60;
   const timerEl = document.getElementById('timer');
@@ -1106,6 +1481,13 @@ function updateHUD() {
 
 function endShift() {
   STATE.gameOver = true; STATE.running = false;
+  stopEngineSound();
+  // save high score
+  if (STATE.money > STATE.highScore) {
+    STATE.highScore = STATE.money;
+    localStorage.setItem('cityHeistHighScore', STATE.highScore.toString());
+  }
+  SFX.fail();
   document.getElementById('endTitle').textContent = 'پایان شیفت';
   document.getElementById('endTitle').style.color = '#6dff8e';
   document.getElementById('endSub').textContent = `${faNum(STATE.delivered)} سفارش تحویل دادی!`;
@@ -1180,13 +1562,20 @@ animate();
 function resetGame() {
   STATE.inCar = null; STATE.health = 100; STATE.money = 0;
   STATE.delivered = 0; STATE.carrying = null; STATE.gameOver = false; STATE.prompt = '';
+  STATE.wanted = 0; STATE.wantedTimer = 0; STATE.crashCooldown = 0;
   shiftTimer = 300;
   player.position.set(16, 0, 16); player.visible = true;
   playerCar.mesh.position.set(19, 0, 19);
   playerCar.heading = 0; playerCar.speed = 0;
   houseBeacons.forEach(b => b.mesh.visible = false);
+  document.getElementById('wantedBox').style.display = 'none';
+  // clear police
+  for (const cop of policeCars) scene.remove(cop.mesh);
+  policeCars.length = 0;
+  stopEngineSound();
 }
 document.getElementById('startBtn').addEventListener('click', () => {
+  initAudio();
   document.getElementById('startScreen').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   resetGame(); STATE.running = true;
@@ -1197,6 +1586,8 @@ document.getElementById('restartBtn').addEventListener('click', () => {
   resetGame(); STATE.running = true;
   showCenter('شیفت شروع شد!', '۵ دقیقه — هرچی بیشتر، بهتر');
 });
+// show high score on start screen
+document.getElementById('startHighScore').textContent = faNum(STATE.highScore) + ' تومان';
 
 </script>
 </body>
