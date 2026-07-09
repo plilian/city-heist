@@ -1429,7 +1429,7 @@ function updateTraffic(dt) {
 
     car.mesh.position.x = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, car.mesh.position.x));
     car.mesh.position.z = Math.max(-cityBoundary + 2, Math.min(cityBoundary - 2, car.mesh.position.z));
-    const roll = -car.steer * Math.min(1, Math.abs(v) / 10) * 00.15;
+    const roll = -car.steer * Math.min(1, Math.abs(v) / 10) * 0.15;
     car.mesh.rotation.set(0, car.heading, 0);
     car.mesh.rotateZ(roll);
     if (car.wheelMeshes) {
